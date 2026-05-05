@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.local/
+runs/r1_08/
+runs/r1_09b/
+runs/daily/
+runs/interactive/

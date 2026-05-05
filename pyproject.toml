@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "frontier-ai-risk-observer"
+version = "0.1.0"
+description = "Deterministic backend scaffold for a Hermes-Agent based frontier AI risk signal observer."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "alembic>=1.13",
+  "beautifulsoup4>=4.12",
+  "fastapi>=0.111",
+  "feedparser>=6.0",
+  "httpx>=0.27",
+  "psycopg[binary]>=3.2",
+  "pydantic>=2.7",
+  "pyyaml>=6.0",
+  "scrapling>=0.4",
+  "sqlalchemy>=2.0",
+  "uvicorn[standard]>=0.30",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.10",
+  "pytest>=8.2",
+  "ruff>=0.5",
+  "types-PyYAML>=6.0",
+]
+mcp = [
+  "mcp>=1.0",
+]
+
+[project.scripts]
+risk-observer-api = "frontier_ai_risk_observer.api.main:run"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["frontier_ai_risk_observer*"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["frontier_ai_risk_observer"]
+strict = true
+warn_unreachable = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

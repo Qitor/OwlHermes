@@ -1,0 +1,85 @@
+version: 1
+positive_keywords:
+- AI safety
+- frontier AI
+- frontier model
+- catastrophic risk
+- system card
+- preparedness framework
+- responsible scaling policy
+- frontier safety framework
+- secure AI framework
+- AI Security Institute
+- model evaluation
+- evals
+- autonomous agent
+- agentic AI
+- self-replication
+- rogue replication
+- sabotage
+- scheming
+- deception
+- sandbagging
+- monitoring
+- oversight
+- cyber capabilities
+- biosecurity
+- chem-bio
+- CBRN
+- red teaming
+- benchmark
+- capability evaluation
+- AI Act
+- GPAI
+- governance
+- risk management
+negative_keywords:
+- earnings
+- stock price
+- marketing campaign
+- consumer app launch
+- AI photo filter
+- AI playlist
+- routine funding
+- celebrity
+risk_domains:
+  autonomy:
+  - autonomous
+  - agent
+  - long-horizon
+  - self-replication
+  - tool use
+  - computer use
+  cyber:
+  - cyber
+  - CTF
+  - vulnerability
+  - exploit
+  - agent hijacking
+  - security
+  bio:
+  - biosecurity
+  - biological
+  - wetlab
+  - pathogen
+  - DNA
+  - protein
+  deception:
+  - deception
+  - scheming
+  - sandbagging
+  - hidden objective
+  - monitor evasion
+  eval_integrity:
+  - evaluation
+  - benchmark
+  - eval tampering
+  - monitorability
+  - gaming
+  governance:
+  - policy
+  - regulation
+  - AI Act
+  - governance
+  - standard
+  - framework

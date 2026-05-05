@@ -1,0 +1,107 @@
+version: 1
+updated_at: '2026-05-04'
+events:
+  - id: idais
+    name: International Dialogues on AI Safety
+    category: international_forum
+    modality: conference_materials
+    url: https://idais.ai/
+    collector: event_page
+    priority: high
+    refresh_interval: daily
+    enabled: true
+    risk_focus: [extreme_risk, red_lines, international_coordination, consensus_signal]
+    watch_for: [statements, policy_guides, new_dialogues, speaker_list, materials]
+    extractor_strategy:
+      diff_mode: agenda_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: SAIF 旗舰 event series。重点监测 statements 和 policy guide。
+
+  - id: safe_ai_forum_events
+    name: Safe AI Forum Events and Updates
+    category: policy_forum
+    modality: conference_materials
+    url: https://saif.org/updates/
+    collector: event_page
+    priority: high
+    refresh_interval: daily
+    enabled: true
+    risk_focus: [extreme_risk, international_coordination, ai_safety_policy]
+    watch_for: [updates, research, opportunities, policy_guide]
+    extractor_strategy:
+      diff_mode: list_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: SAIF 站点更新。
+
+  - id: unprompted_con
+    name: '[un]prompted'
+    category: ml_security_conference
+    modality: conference_agenda
+    url: https://unpromptedcon.org/
+    collector: event_page
+    priority: high
+    refresh_interval: daily
+    enabled: true
+    risk_focus: [cyber, agent_security, mlsec, autonomous_security_agents, mcp]
+    watch_for: [agenda, youtube_videos, slides, talks, speaker_affiliation]
+    extractor_strategy:
+      diff_mode: agenda_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: AI security / MLsec / agentic cyber 相关会议，关注 Anthropic/DeepMind/OpenAI/security researchers talks。
+
+  - id: ai_safety_summit_series
+    name: Global AI Safety / Action / Impact Summit Series
+    category: government_summit
+    modality: summit_statement
+    url: https://www.gov.uk/government/topical-events/ai-safety-summit-2023
+    collector: event_page
+    priority: high
+    refresh_interval: weekly
+    enabled: true
+    risk_focus: [international_coordination, frontier_ai_policy, safety_commitments]
+    watch_for: [declarations, communiques, safety_commitments, national_positions]
+    helper_type: manual
+    known_issues: URL points to 2023 Bletchley Park summit page only; no single page tracks the full summit chain (Seoul 2024, Paris 2025, India/Geneva upcoming). Needs human review to identify current official pages for each summit.
+    requires_human_review: true
+    extractor_strategy:
+      diff_mode: list_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 追踪 Bletchley、Seoul、Paris、India、Geneva 等峰会链条。
+
+  - id: frontier_ai_safety_commitments
+    name: Frontier AI Safety Commitments
+    category: government_summit
+    modality: summit_statement
+    url: https://www.gov.uk/government/publications/frontier-ai-safety-commitments-ai-seoul-summit-2024/frontier-ai-safety-commitments-ai-seoul-summit-2024
+    collector: manual_url
+    priority: high
+    refresh_interval: weekly
+    enabled: true
+    risk_focus: [safety_commitments, frontier_labs, policy, evals]
+    watch_for: [commitment_changes, signatories, updated_policy]
+    extractor_strategy:
+      diff_mode: section_hash
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 关键 commitments 页面。
+
+  - id: international_ai_safety_report_updates
+    name: International AI Safety Report Updates
+    category: international_report
+    modality: pdf_report
+    url: https://internationalaisafetyreport.org/
+    collector: event_page
+    priority: high
+    refresh_interval: weekly
+    enabled: true
+    risk_focus: [capabilities, emerging_risks, mitigation, international_consensus]
+    watch_for: [report_updates, policymaker_summary, notable_developments]
+    extractor_strategy:
+      diff_mode: list_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 作为国际共识和能力/风险变化的锚点来源。

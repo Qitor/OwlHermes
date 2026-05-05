@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+<channel>
+<title>Test Podcast</title>
+<link>https://example.com/podcast/</link>
+<item>
+  <title>Episode 42: AI Safety with Guest</title>
+  <link>https://example.com/ep42</link>
+  <description>A deep dive into AI safety research.</description>
+  <pubDate>Mon, 04 May 2026 09:00:00 +0000</pubDate>
+  <enclosure url="https://example.com/ep42.mp3" type="audio/mpeg" length="12345"/>
+</item>
+<item>
+  <title>Episode 41: Eval Methodology</title>
+  <link>https://example.com/ep41</link>
+  <description>Different eval approaches for frontier models.</description>
+  <pubDate>Mon, 27 Apr 2026 09:00:00 +0000</pubDate>
+  <enclosure url="https://example.com/ep41.mp3" type="audio/mpeg" length="12345"/>
+</item>
+</channel>
+</rss>

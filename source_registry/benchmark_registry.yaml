@@ -1,0 +1,98 @@
+version: 1
+updated_at: '2026-05-04'
+benchmarks:
+  - id: metr_time_horizon
+    name: METR time horizon / autonomy evaluations
+    risk_domains: [autonomy, ai_rnd, eval_integrity]
+    source_ids: [metr_evaluations, metr_blog]
+    observation_type: report_value
+    extraction_method: manual_or_llm_assisted
+    priority: high
+    trigger_rules:
+      - type: threshold_crossing
+        description: Significant increase in autonomous task horizon or AI R&D capability.
+    notes: 关注 frontier model 完成长期任务、AI R&D assistance、autonomy evidence。
+
+  - id: apollo_scheming_deception
+    name: Apollo scheming / deception evaluations
+    risk_domains: [scheming, deception, eval_awareness, oversight]
+    source_ids: [apollo_blog]
+    observation_type: eval_result
+    extraction_method: llm_assisted_from_reports
+    priority: high
+    trigger_rules:
+      - type: new_eval_method
+        description: New method for measuring scheming, deception, hidden goals, or sandbagging.
+    notes: 关注 frontier models strategic deception。
+
+  - id: uk_aisi_cyber_bio_autonomy
+    name: UK AISI frontier model risk evaluations
+    risk_domains: [cyber, biosecurity, autonomy, model_control]
+    source_ids: [uk_aisi_research, uk_aisi_blog]
+    observation_type: report_value
+    extraction_method: manual_or_llm_assisted
+    priority: high
+    trigger_rules:
+      - type: new_capability_warning
+        description: AISI reports material changes in cyber/bio/autonomy/model-control evidence.
+    notes: 关注 AISI research reports and blog summaries。
+
+  - id: openai_preparedness_thresholds
+    name: OpenAI Preparedness Framework thresholds
+    risk_domains: [cyber, biosecurity, autonomy, persuasion, model_release_risk]
+    source_ids: [openai_news]
+    observation_type: framework_diff
+    extraction_method: manual_url_diff
+    priority: high
+    trigger_rules:
+      - type: framework_diff
+        description: Preparedness Framework threshold or score changes.
+    notes: 需要后续加入固定 URL。
+
+  - id: anthropic_rsp_thresholds
+    name: Anthropic Responsible Scaling Policy thresholds
+    risk_domains: [model_release_risk, autonomy, cyber, biosecurity, ai_rnd]
+    source_ids: [anthropic_news]
+    observation_type: framework_diff
+    extraction_method: manual_url_diff
+    priority: high
+    trigger_rules:
+      - type: framework_diff
+        description: ASL/RSP threshold, commitment, or deployment rule changes.
+    notes: 需要后续加入固定 URL。
+
+  - id: deepmind_frontier_safety_framework
+    name: Google DeepMind Frontier Safety Framework
+    risk_domains: [frontier_governance, cyber, biosecurity, autonomy, model_release_risk]
+    source_ids: [deepmind_responsibility_safety, deepmind_blog]
+    observation_type: framework_diff
+    extraction_method: manual_url_diff
+    priority: high
+    trigger_rules:
+      - type: framework_diff
+        description: FSF capability level, mitigation, deployment protocol changes.
+    notes: 追踪 DeepMind safety framework updates。
+
+  - id: ai_agent_security
+    name: AI agent security and autonomous cyber capability
+    risk_domains: [cyber, agent_security, autonomy, misuse]
+    source_ids: [nist_caisi, unprompted_con, uk_aisi_research]
+    observation_type: mixed_signal
+    extraction_method: event_and_report_extraction
+    priority: high
+    trigger_rules:
+      - type: new_capability_warning
+        description: New evidence of autonomous vulnerability discovery, malware analysis, or agent hijacking.
+    notes: 连接 [un]prompted、NIST CAISI、AISI cyber 等来源。
+
+  - id: international_consensus_red_lines
+    name: International consensus / red lines / safety commitments
+    risk_domains: [international_coordination, frontier_governance, policy]
+    source_ids: [safe_ai_forum, idais_main, international_ai_safety_report, eu_ai_office]
+    observation_type: policy_framework
+    extraction_method: event_statement_diff
+    priority: high
+    trigger_rules:
+      - type: consensus_shift
+        description: New joint statement, red line, policy guide, or summit declaration.
+    notes: 这是政策/国际共识通道。

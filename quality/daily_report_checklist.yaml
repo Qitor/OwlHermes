@@ -1,0 +1,99 @@
+# Daily Report Quality Checklist
+# Each check has: id, name, description, weight (contribution to score 0-100)
+# Scripts read this YAML to run deterministic quality checks.
+
+checks:
+  - id: has_non_production_label
+    name: "Non-production label"
+    description: "Report is clearly labeled as non-production/local when applicable"
+    weight: 5
+
+  - id: has_one_sentence_overview
+    name: "One-sentence overview"
+    description: "Report has a 今日一句话总览 or equivalent one-sentence summary"
+    weight: 8
+
+  - id: has_top_signals_section
+    name: "Top Signals section"
+    description: "Report has a Top Signals or 信号 section"
+    weight: 10
+
+  - id: has_candidate_items_section
+    name: "Candidate items section"
+    description: "Report has a section for items considered but not promoted to signals"
+    weight: 5
+
+  - id: has_evidence_links
+    name: "Evidence links"
+    description: "At least one signal includes a primary source URL"
+    weight: 10
+
+  - id: has_uncertainty_section
+    name: "Uncertainty section"
+    description: "Report discusses evidence gaps, unverified claims, or low-confidence areas"
+    weight: 8
+
+  - id: has_follow_up_section
+    name: "Follow-up section"
+    description: "Report has a 需跟进 or follow-up section"
+    weight: 8
+
+  - id: distinguishes_signal_vs_news
+    name: "Signal vs news distinction"
+    description: "Report treats signals as risk judgments, not news items"
+    weight: 8
+
+  - id: each_signal_has_what_changed
+    name: "Each signal: what changed"
+    description: "Every Top Signal explains what changed"
+    weight: 8
+
+  - id: each_signal_has_why_it_matters
+    name: "Each signal: why it matters"
+    description: "Every Top Signal explains why it affects risk judgment"
+    weight: 8
+
+  - id: each_signal_has_what_to_watch_next
+    name: "Each signal: what to watch next"
+    description: "Every Top Signal identifies a next observation point"
+    weight: 5
+
+  - id: avoids_tool_log_style
+    name: "Avoids tool-log style"
+    description: "Report is not primarily a log of tool calls or process steps"
+    weight: 5
+
+  - id: avoids_news_dump_style
+    name: "Avoids news-dump style"
+    description: "Report is not a raw list of news items without risk judgment"
+    weight: 5
+
+  - id: mentions_no_signal_if_none_found
+    name: "No-signal acknowledgment"
+    description: "If no signals found, report explicitly states this with explanation"
+    weight: 5
+
+  - id: includes_source_coverage
+    name: "Source coverage"
+    description: "Report mentions which sources were checked"
+    weight: 3
+
+  - id: includes_helper_notes_if_helpers_used
+    name: "Helper notes (if used)"
+    description: "If helpers were used, report includes helper usage notes"
+    weight: 2
+
+  - id: avoids_product_announcements_as_signals
+    name: "No product announcements as signals"
+    description: "Ordinary product launches are not treated as risk signals without risk justification"
+    weight: 5
+
+  - id: has_chinese_content
+    name: "Chinese content"
+    description: "Report contains meaningful Chinese-language content"
+    weight: 3
+
+  - id: avoids_advisory_as_final_evidence
+    name: "No advisory-as-final-evidence"
+    description: "Report does not treat small-model advisory labels as final evidence or risk judgment"
+    weight: 5

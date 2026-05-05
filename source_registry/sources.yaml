@@ -1,0 +1,411 @@
+version: 2
+updated_at: '2026-05-04'
+sources:
+  - id: metr_evaluations
+    name: METR Evaluations
+    category: frontier_eval_lab
+    modality: web_article
+    url: https://metr.org/evaluations/
+    feed_url: null
+    collector: web_index
+    priority: high
+    refresh_interval: daily
+    enabled: true
+    risk_focus: [autonomy, ai_rnd, eval_integrity, catastrophic_risk]
+    extractor_strategy:
+      diff_mode: list_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 关注 frontier model evaluation reports、time horizon、AI R&D、sabotage、monitorability。
+
+  - id: metr_blog
+    name: METR Blog / Notes
+    category: frontier_eval_lab
+    modality: web_article
+    url: https://metr.org/blog/
+    feed_url: null
+    collector: web_index
+    priority: high
+    refresh_interval: daily
+    enabled: true
+    risk_focus: [evals, monitorability, autonomy]
+    extractor_strategy:
+      diff_mode: list_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 若无稳定 RSS，使用 web_index 抓列表页。
+
+  - id: apollo_blog
+    name: Apollo Research Blog
+    category: frontier_eval_lab
+    modality: web_article
+    url: https://www.apolloresearch.ai/blog/
+    feed_url: null
+    collector: web_index
+    priority: high
+    refresh_interval: daily
+    enabled: true
+    risk_focus: [scheming, deception, oversight, evals, governance]
+    helper_type: scrapling_official_page
+    scrapling_url: https://www.apolloresearch.ai/blog/
+    max_items: 10
+    lookback_days: 30
+    known_issues: R1-08 found no recent items in the last 7 days; blog may update infrequently.
+    extractor_strategy:
+      diff_mode: list_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: Apollo 重点关注 scheming frontier AI、monitoring、安全产品和治理。
+
+  - id: anthropic_news
+    name: Anthropic News / Research / Safety
+    category: frontier_ai_lab
+    modality: web_article
+    url: https://www.anthropic.com/news
+    feed_url: null
+    collector: web_index
+    priority: high
+    refresh_interval: daily
+    enabled: true
+    risk_focus: [rsp, model_release, system_card, alignment, interpretability, policy]
+    helper_type: scrapling_official_page
+    scrapling_url: https://www.anthropic.com/news
+    link_include_patterns: ["/news/", "/research/", "/policy/"]
+    max_items: 10
+    lookback_days: 14
+    known_issues: Direct article URL construction may return 404; prefer extracting links from official news page listing.
+    extractor_strategy:
+      diff_mode: list_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 关注 Responsible Scaling Policy、system card、Claude 安全评估、policy posts。
+
+  - id: openai_news
+    name: OpenAI News / Research / Safety
+    category: frontier_ai_lab
+    modality: web_article
+    url: https://openai.com/news/
+    feed_url: null
+    collector: web_index
+    priority: high
+    refresh_interval: daily
+    enabled: true
+    risk_focus: [preparedness, model_release, system_card, safety_governance, policy]
+    extractor_strategy:
+      diff_mode: list_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 关注 Preparedness Framework、system cards、安全与治理更新。
+
+  - id: deepmind_blog
+    name: Google DeepMind Blog
+    category: frontier_ai_lab
+    modality: web_article
+    url: https://deepmind.google/blog/
+    feed_url: null
+    collector: web_index
+    priority: high
+    refresh_interval: daily
+    enabled: true
+    risk_focus: [frontier_safety_framework, cyber, bio, autonomy, responsibility]
+    extractor_strategy:
+      diff_mode: list_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 关注 Frontier Safety Framework、responsibility/safety、Gemini system cards。
+
+  - id: deepmind_responsibility_safety
+    name: Google DeepMind Responsibility & Safety
+    category: frontier_ai_lab
+    modality: framework_page
+    url: https://deepmind.google/responsibility-and-safety/
+    feed_url: null
+    collector: manual_url
+    priority: high
+    refresh_interval: weekly
+    enabled: true
+    risk_focus: [frontier_safety_framework, governance, safety_case]
+    extractor_strategy:
+      diff_mode: section_hash
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 固定框架页，hash diff 触发更新。
+
+  - id: uk_aisi_research
+    name: UK AI Security Institute Research
+    category: government_eval_lab
+    modality: web_article
+    url: https://www.aisi.gov.uk/research
+    feed_url: null
+    collector: web_index
+    priority: high
+    refresh_interval: daily
+    enabled: true
+    risk_focus: [cyber, autonomous_systems, chem_bio, control, safety_cases, science_of_evals]
+    extractor_strategy:
+      diff_mode: list_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: AISI 研究分类广，优先抽取 publications/blogs。
+
+  - id: uk_aisi_blog
+    name: UK AI Security Institute Blog
+    category: government_eval_lab
+    modality: web_article
+    url: https://www.aisi.gov.uk/blog
+    feed_url: null
+    collector: web_index
+    priority: high
+    refresh_interval: daily
+    enabled: true
+    risk_focus: [evals, sabotage, cyber, autonomy, model_control]
+    extractor_strategy:
+      diff_mode: list_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 捕捉 AISI 研究解释和 eval updates。
+
+  - id: nist_caisi
+    name: NIST CAISI
+    category: government_eval_lab
+    modality: web_article
+    url: https://www.nist.gov/caisi
+    feed_url: null
+    collector: web_index
+    priority: high
+    refresh_interval: daily
+    enabled: true
+    risk_focus: [agent_security, standards, red_teaming, cyber, national_security]
+    extractor_strategy:
+      diff_mode: list_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 关注 AI agent security、standards、red teaming、cyber/bio/chem national security。
+
+  - id: govai_research
+    name: Centre for the Governance of AI Research
+    category: policy_research_lab
+    modality: web_article
+    url: https://www.governance.ai/research
+    feed_url: null
+    collector: web_index
+    priority: high
+    refresh_interval: daily
+    enabled: true
+    risk_focus: [ai_governance, policy, threat_modeling, geopolitics, compute_governance]
+    extractor_strategy:
+      diff_mode: list_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 政策研究和治理研究。
+
+  - id: safe_ai_forum
+    name: Safe AI Forum
+    category: policy_research_lab
+    modality: web_article
+    url: https://saif.org/
+    feed_url: null
+    collector: web_index
+    priority: high
+    refresh_interval: daily
+    enabled: true
+    risk_focus: [extreme_risk, international_coordination, red_lines, policy_guide]
+    extractor_strategy:
+      diff_mode: list_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: SAIF = Safe AI Forum。关注 IDAIS、research、updates、policy guide。
+
+  - id: safe_ai_forum_research
+    name: Safe AI Forum Research
+    category: policy_research_lab
+    modality: web_article
+    url: https://saif.org/research/
+    feed_url: null
+    collector: web_index
+    priority: high
+    refresh_interval: daily
+    enabled: true
+    risk_focus: [extreme_risk, ai_safety_research, policy_guide, international_coordination]
+    extractor_strategy:
+      diff_mode: list_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: SAIF 研究页。
+
+  - id: safe_ai_forum_updates
+    name: Safe AI Forum Updates
+    category: policy_research_lab
+    modality: web_article
+    url: https://saif.org/updates/
+    feed_url: null
+    collector: web_index
+    priority: high
+    refresh_interval: daily
+    enabled: true
+    risk_focus: [idais, international_coordination, red_lines, consensus_signal]
+    extractor_strategy:
+      diff_mode: list_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 关注 IDAIS Venice/Beijing/Oxford 等更新。
+
+  - id: idais_main
+    name: International Dialogues on AI Safety
+    category: international_forum
+    modality: conference_materials
+    url: https://idais.ai/
+    feed_url: null
+    collector: event_page
+    priority: high
+    refresh_interval: daily
+    enabled: true
+    risk_focus: [extreme_risk, international_coordination, red_lines, consensus_signal]
+    extractor_strategy:
+      diff_mode: agenda_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 监测 statements、dialogues、materials。
+
+  - id: international_ai_safety_report
+    name: International AI Safety Report
+    category: international_org
+    modality: pdf_report
+    url: https://internationalaisafetyreport.org/
+    feed_url: null
+    collector: web_index
+    priority: high
+    refresh_interval: weekly
+    enabled: true
+    risk_focus: [international_consensus, capabilities, emerging_risks, mitigation]
+    extractor_strategy:
+      diff_mode: list_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 监测 report、extended summary、updates。
+
+  - id: eu_ai_office
+    name: European AI Office
+    category: government_policy
+    modality: web_article
+    url: https://digital-strategy.ec.europa.eu/en/policies/ai-office
+    feed_url: null
+    collector: manual_url
+    priority: high
+    refresh_interval: weekly
+    enabled: true
+    risk_focus: [ai_act, gpaim, policy, international_cooperation]
+    extractor_strategy:
+      diff_mode: section_hash
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 关注 EU AI Act、GPAI obligations、Code of Practice。
+
+  - id: govuk_ai_search
+    name: GOV.UK AI Search
+    category: government_policy
+    modality: web_article
+    url: https://www.gov.uk/search/all?keywords=artificial+intelligence
+    feed_url: null
+    collector: web_index
+    priority: medium
+    refresh_interval: daily
+    enabled: true
+    risk_focus: [uk_policy, ai_safety, regulation, ai_security]
+    extractor_strategy:
+      diff_mode: list_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 英国政府 AI 相关政策与公告。
+
+  - id: oecd_ai
+    name: OECD AI Policy Observatory
+    category: international_org
+    modality: web_article
+    url: https://oecd.ai/
+    feed_url: null
+    collector: web_index
+    priority: medium
+    refresh_interval: weekly
+    enabled: true
+    risk_focus: [international_consensus, policy]
+    extractor_strategy:
+      diff_mode: list_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 国际政策与国家政策数据库。
+
+  - id: arxiv_ai_safety
+    name: arXiv AI Safety Query
+    category: academic
+    modality: arxiv_paper
+    url: https://export.arxiv.org/api/query
+    feed_url: null
+    collector: arxiv
+    priority: medium
+    refresh_interval: daily
+    enabled: true
+    risk_focus: [ai_safety, alignment, agents, cyber, biosecurity, evals, deception]
+    query: '(cat:cs.AI OR cat:cs.LG OR cat:cs.CL OR cat:cs.CR) AND ("AI safety" OR "frontier model" OR "agent safety" OR alignment OR deception OR "model evaluation" OR cyber OR biosecurity OR scheming OR sabotage)'
+    helper_type: arxiv_query
+    max_items: 20
+    lookback_days: 7
+    extractor_strategy:
+      diff_mode: api_items
+      requires_js: false
+      rate_limit_seconds: 3
+    notes: 使用 arXiv API，注意访问频率。
+
+  - id: techcrunch_ai
+    name: TechCrunch AI
+    category: news
+    modality: rss_feed
+    url: https://techcrunch.com/category/artificial-intelligence/
+    feed_url: https://techcrunch.com/category/artificial-intelligence/feed/
+    collector: rss
+    priority: medium
+    refresh_interval: daily
+    enabled: true
+    risk_focus: [frontier_labs, policy, incidents, market_context]
+    helper_type: rss
+    max_items: 15
+    lookback_days: 7
+    extractor_strategy:
+      diff_mode: feed_items
+      requires_js: false
+      rate_limit_seconds: 5
+    notes: 权威科技新闻，需二次筛选以避免泛 AI 新闻噪音。
+
+  - id: reuters_technology_ai
+    name: Reuters Technology AI
+    category: news
+    modality: web_article
+    url: https://www.reuters.com/technology/
+    feed_url: null
+    collector: web_index
+    priority: medium
+    refresh_interval: daily
+    enabled: false
+    risk_focus: [policy, frontier_labs, market_context, incidents]
+    extractor_strategy:
+      diff_mode: list_items
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: Round 2 可开启。新闻源只作补充发现。
+
+  - id: google_secure_ai_framework_optional
+    name: Google Secure AI Framework Optional
+    category: security_framework
+    modality: framework_page
+    url: https://safety.google/intl/en_in/safety/saif/
+    feed_url: null
+    collector: manual_url
+    priority: medium
+    refresh_interval: weekly
+    enabled: false
+    risk_focus: [security_framework, agent_security, controls]
+    extractor_strategy:
+      diff_mode: section_hash
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 可选来源。注意不要与 Safe AI Forum 混淆；本项目默认 SAIF 指 Safe AI Forum。

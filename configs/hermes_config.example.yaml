@@ -1,0 +1,45 @@
+# Example Hermes config fragment for AI Risk Signal Observatory.
+# Merge into ~/.hermes/config.yaml.
+#
+# NOTE: `hermes mcp add` CLI cannot pass `-m` as an arg because Hermes'
+# argparse intercepts it. Use `make hermes-smoke-apply` or edit YAML directly.
+
+mcp_servers:
+  ai_risk_observer:
+    # Launch from this repository after installing its Python dependencies.
+    command: "/path/to/repo/.venv/bin/python"
+    args:
+      - "-m"
+      - "frontier_ai_risk_observer.mcp.server"
+    timeout: 120
+    enabled: true
+    tools:
+      include:
+        - risk_registry_summary
+        - risk_registry_list_due_sources
+        - risk_registry_get_source
+        - risk_raw_item_seen_check
+        - risk_raw_item_store
+        - risk_raw_item_search
+        - risk_raw_item_duplicate_candidates
+        - risk_source_run_record
+        - risk_signal_store
+        - risk_signal_search
+        - risk_digest_store
+        - risk_digest_search
+        - risk_benchmark_observation_store
+        - risk_source_health_summary
+        - risk_discovery_helper_preview
+        - risk_candidate_preprocess
+      prompts: false
+      resources: false
+    env:
+      SOURCE_REGISTRY_DIR: "/path/to/repo/source_registry"
+
+skills:
+  external_dirs:
+    - "/path/to/repo/skills"
+
+# Configure Hermes cron and built-in research/video/browser skills separately
+# according to your deployment. This repo does not vendor Hermes-Agent.
+# Daily task prompt should reference prompts/daily_signal_collection_prompt.md.

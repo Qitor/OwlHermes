@@ -1,0 +1,128 @@
+version: 1
+updated_at: '2026-05-04'
+podcasts:
+  - id: axrp
+    name: AXRP - The AI X-risk Research Podcast
+    category: podcast
+    modality: podcast_transcript
+    url: https://axrp.net/
+    feed_url: null
+    collector: podcast_feed
+    priority: high
+    refresh_interval: weekly
+    enabled: true
+    risk_focus: [ai_xrisk, alignment, evals, interpretability, governance]
+    transcript_strategy: official_website
+    notable_entities: [Daniel Filan]
+    helper_type: scrapling_official_page
+    scrapling_url: https://axrp.net/
+    max_items: 10
+    lookback_days: 30
+    known_issues: No RSS feed URL found in registry; R1-08 found no recent episodes.
+    requires_human_review: true
+    extractor_strategy:
+      transcript_source: official
+      diff_mode: episode_list
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 优先，因为有 transcripts，适合 claim-level extraction。
+
+  - id: dwarkesh_podcast
+    name: Dwarkesh Podcast
+    category: podcast
+    modality: podcast_episode
+    url: https://www.dwarkesh.com/
+    feed_url: null
+    collector: podcast_feed
+    priority: high
+    refresh_interval: weekly
+    enabled: true
+    risk_focus: [frontier_labs, scaling, governance, ai_strategy, national_security]
+    transcript_strategy: website_if_available
+    notable_entities: [Dwarkesh Patel]
+    extractor_strategy:
+      transcript_source: official_or_page
+      diff_mode: episode_list
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 重点关注 OpenAI/Anthropic/DeepMind 高管、研究员、政策专家访谈。
+
+  - id: eighty_thousand_hours_podcast
+    name: 80,000 Hours Podcast
+    category: podcast
+    modality: podcast_transcript
+    url: https://80000hours.org/podcast/
+    feed_url: null
+    collector: podcast_feed
+    priority: high
+    refresh_interval: weekly
+    enabled: true
+    risk_focus: [ai_safety, biosecurity, governance, existential_risk]
+    transcript_strategy: official_website
+    notable_entities: []
+    extractor_strategy:
+      transcript_source: official
+      diff_mode: episode_list
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 长访谈、通常有 transcript，适合提取 expert claims。
+
+  - id: cognitive_revolution
+    name: The Cognitive Revolution
+    category: podcast
+    modality: podcast_episode
+    url: https://www.cognitiverevolution.ai/
+    feed_url: null
+    collector: podcast_feed
+    priority: medium
+    refresh_interval: weekly
+    enabled: true
+    risk_focus: [frontier_labs, agents, evals, productization, ai_safety]
+    transcript_strategy: website_or_youtube
+    notable_entities: []
+    extractor_strategy:
+      transcript_source: website_or_youtube_caption
+      diff_mode: episode_list
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 关注 frontier lab researchers / AI agents / evals 相关 episode。
+
+  - id: latent_space
+    name: Latent Space
+    category: podcast
+    modality: podcast_episode
+    url: https://www.latent.space/
+    feed_url: null
+    collector: podcast_feed
+    priority: medium
+    refresh_interval: weekly
+    enabled: true
+    risk_focus: [agents, model_release, open_models, developer_ecosystem]
+    transcript_strategy: website_if_available
+    notable_entities: []
+    extractor_strategy:
+      transcript_source: official_or_page
+      diff_mode: episode_list
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 偏开发者生态，只有强 AI risk 相关 episode 才升级。
+
+  - id: security_cryptography_whatever
+    name: Security. Cryptography. Whatever.
+    category: podcast
+    modality: podcast_episode
+    url: https://securitycryptographywhatever.com/
+    feed_url: null
+    collector: podcast_feed
+    priority: medium
+    refresh_interval: weekly
+    enabled: true
+    risk_focus: [cyber, agent_security, mlsec, vulnerability_discovery]
+    transcript_strategy: website_if_available
+    notable_entities: []
+    extractor_strategy:
+      transcript_source: website_or_none
+      diff_mode: episode_list
+      requires_js: false
+      rate_limit_seconds: 10
+    notes: 关注 AI cyber / ML security / Nicholas Carlini 等技术访谈。

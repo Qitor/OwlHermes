@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel>
+<title>Test RSS Feed</title>
+<link>https://example.com/feed/</link>
+<item>
+  <title>Test Article One</title>
+  <link>https://example.com/article-1</link>
+  <description>Summary of article one.</description>
+  <pubDate>Mon, 04 May 2026 10:00:00 +0000</pubDate>
+</item>
+<item>
+  <title>Test Article Two</title>
+  <link>https://example.com/article-2?utm_source=rss</link>
+  <description>Summary of article two.</description>
+  <pubDate>Sun, 03 May 2026 12:00:00 +0000</pubDate>
+</item>
+<item>
+  <title>Test Article Three</title>
+  <link>https://example.com/article-3</link>
+  <description>Summary of article three.</description>
+  <pubDate>Sat, 02 May 2026 08:00:00 +0000</pubDate>
+</item>
+</channel>
+</rss>

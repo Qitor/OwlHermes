@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
+<title>ArXiv Query</title>
+<entry>
+  <id>http://arxiv.org/abs/2605.01234v1</id>
+  <title>Test Paper on AI Safety</title>
+  <summary>A test paper about AI safety methods.</summary>
+  <published>2026-05-03T00:00:00Z</published>
+  <link title="html" type="text/html" rel="alternate" href="http://arxiv.org/abs/2605.01234v1"/>
+</entry>
+<entry>
+  <id>http://arxiv.org/abs/2605.05678v1</id>
+  <title>Another Test Paper on Alignment</title>
+  <summary>A test paper about alignment research.</summary>
+  <published>2026-05-02T00:00:00Z</published>
+  <link title="html" type="text/html" rel="alternate" href="http://arxiv.org/abs/2605.05678v1"/>
+</entry>
+</feed>

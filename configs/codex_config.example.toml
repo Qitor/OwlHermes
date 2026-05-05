@@ -1,0 +1,15 @@
+# Example Codex project/user configuration notes
+# Copy relevant settings into ~/.codex/config.toml or .codex/config.toml.
+# Keep approval and sandboxing conservative unless running in an isolated environment.
+
+# approval_policy = "on-request"
+# sandbox_mode = "workspace-write"
+
+# You can configure MCP servers here if you want Codex itself to access tools.
+# This is separate from Hermes-Agent MCP configuration in hermes_config.example.yaml.
+# [mcp_servers.risk_signal_backend]
+# command = "python"
+# args = ["mcp_server_scaffold/server.py"]
+
+# Repo instructions are primarily stored in AGENTS.md.
+# Codex should read AGENTS.md before making changes.
