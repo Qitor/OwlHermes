@@ -49,6 +49,9 @@ class SignalStoreInput(BaseModel):
     source_id: str | None = None
     title: str
     summary: str
+    what_changed: str = ""
+    why_it_matters: str = ""
+    what_to_watch_next: str = ""
     risk_domain: str | None = None
     risk_domains: list[str] = Field(default_factory=list)
     signal_type: str
@@ -61,6 +64,7 @@ class SignalStoreInput(BaseModel):
     time_sensitivity: int = Field(default=3, ge=1, le=5)
     priority_score: Decimal = Decimal("0")
     needs_human_review: bool = False
+    needs_review_reason: str = ""
     status: str = "draft"
     signal_date: date | None = None
 

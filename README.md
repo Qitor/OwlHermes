@@ -405,6 +405,32 @@ AIRO_SMALL_MODEL_API_KEY_ENV=INF_API_KEY
 
 See `docs/22_model_tiered_daily_report_pipeline.md` for full details.
 
+## R1-11C Two-Phase Daily Report Finalization
+
+R1-11C makes `make daily-report` reliable. Even if Hermes times out during the collection phase, the system produces a readable Chinese daily report.
+
+Two phases:
+
+| Phase | Purpose | Timeout |
+|-------|---------|---------|
+| **Phase A** (collection/research) | Hermes selects sources, collects evidence, stores items/signals | 30 min |
+| **Phase B** (finalize/report) | Hermes writes report from DB state only (no browsing) | 10 min |
+
+Phase B runs automatically if Phase A times out, exits non-zero, or doesn't produce a complete report. Phase B uses only local DB state — no web browsing, no URL fetching.
+
+```bash
+make daily-report                # Two-phase daily report
+make daily-report-preflight      # Preflight checks
+make daily-report-inspect        # Inspect latest run
+make daily-report-with-quality   # Daily report + quality check
+make daily-report-finalize       # Force finalize on latest run
+make daily-report-debug          # Show latest run artifacts
+```
+
+`risk_signal_store` now accepts explicit `what_changed`, `why_it_matters`, `what_to_watch_next`, and `needs_review_reason` fields. Missing three-question reasoning automatically marks signals for human review.
+
+See `docs/22_two_phase_daily_report_finalization.md` for full details.
+
 ## 第一阶段成功标准
 
 第一阶段不要追求漂亮网站。成功标准是：

@@ -25,17 +25,48 @@ def store_signal(session: Session, payload: SignalStoreInput) -> Signal:
     source_ids = [payload.source_id] if payload.source_id else []
     raw_item_ids = [payload.raw_item_id] if payload.raw_item_id else []
     now = datetime.now(UTC)
+    # Use explicit fields if provided, otherwise fall back to metadata
+    # Empty string means "not provided" for the three-question fields
+    what_changed = (
+        payload.what_changed
+        or str(payload.metadata.get("what_changed", ""))
+        or payload.summary
+    )
+    why_it_matters = (
+        payload.why_it_matters
+        or str(payload.metadata.get("why_it_matters", ""))
+        or payload.summary
+    )
+    what_to_watch_next = (
+        payload.what_to_watch_next
+        or str(payload.metadata.get("what_to_watch_next", ""))
+    )
+    # Mark for human review if explicit three-question reasoning was not provided
+    has_explicit_reasoning = bool(
+        payload.what_changed or payload.metadata.get("what_changed")
+    ) and bool(
+        payload.why_it_matters or payload.metadata.get("why_it_matters")
+    )
+    needs_review = payload.needs_human_review
+    if not needs_review and not has_explicit_reasoning:
+        needs_review = True
+    needs_review_reason = payload.needs_review_reason
+    if not needs_review_reason and needs_review and (
+        not what_changed or not why_it_matters
+    ):
+        needs_review_reason = "Missing three-question signal reasoning"
     metadata = {
         "summary": payload.summary,
         "mcp_metadata": payload.metadata,
+        "needs_review_reason": needs_review_reason,
     }
     signal = Signal(
         id=uuid.uuid4(),
         title_zh=payload.title,
         summary_zh=payload.summary,
-        what_changed=str(payload.metadata.get("what_changed", payload.summary)),
-        why_it_matters=str(payload.metadata.get("why_it_matters", payload.summary)),
-        what_to_watch_next=str(payload.metadata.get("what_to_watch_next", "")),
+        what_changed=what_changed,
+        why_it_matters=why_it_matters,
+        what_to_watch_next=what_to_watch_next,
         signal_type=payload.signal_type,
         risk_domains=risk_domains,
         entities=list(payload.metadata.get("entities", [])),
@@ -49,7 +80,7 @@ def store_signal(session: Session, payload: SignalStoreInput) -> Signal:
         confidence=payload.confidence,
         time_sensitivity=payload.time_sensitivity,
         priority_score=payload.priority_score,
-        needs_human_review=payload.needs_human_review,
+        needs_human_review=needs_review,
         status=payload.status,
         signal_date=payload.signal_date or date.today(),
         metadata_=metadata,
@@ -93,6 +124,9 @@ def signal_to_dict(signal: Signal) -> dict[str, Any]:
         "id": str(signal.id),
         "title": signal.title_zh,
         "summary": signal.summary_zh,
+        "what_changed": signal.what_changed,
+        "why_it_matters": signal.why_it_matters,
+        "what_to_watch_next": signal.what_to_watch_next,
         "risk_domains": signal.risk_domains,
         "signal_type": signal.signal_type,
         "severity": signal.severity,
