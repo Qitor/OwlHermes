@@ -146,12 +146,30 @@ def risk_raw_item_store(raw_item: dict[str, Any]) -> dict[str, Any]:
         return _error("validation_error", str(exc))
     except Exception as exc:  # noqa: BLE001
         return _error("database_unavailable", str(exc))
-    return {
+
+    # Auto-mirror to live vault as candidate note (best-effort)
+    item_dict = _raw_item_to_dict(result.item)
+    mirror_info = _auto_mirror_to_live_vault(
+        "candidate",
+        slug=item_dict.get("title", "untitled-item")[:60],
+        title=item_dict.get("title", "Untitled Candidate"),
+        body=(
+            f"**URL**: {item_dict.get('canonical_url', 'N/A')}\n\n"
+            f"**Source**: {item_dict.get('source_id', 'N/A')}\n\n"
+            f"**Content**: {item_dict.get('content_text', '')[:2000]}"
+        ),
+        source_id=item_dict.get("source_id"),
+    )
+
+    return_item = {
         "ok": True,
-        "item": _raw_item_to_dict(result.item),
+        "item": item_dict,
         "is_duplicate": result.is_duplicate,
         "match_type": result.match_type,
     }
+    if mirror_info.get("mirrored"):
+        return_item["vault_mirror"] = mirror_info
+    return return_item
 
 
 def risk_raw_item_search(
@@ -235,7 +253,39 @@ def risk_signal_store(signal: dict[str, Any]) -> dict[str, Any]:
         return _error("validation_error", str(exc))
     except Exception as exc:  # noqa: BLE001
         return _error("database_unavailable", str(exc))
-    return {"ok": True, "signal": signal_to_dict(stored)}
+
+    # Auto-mirror to live vault (best-effort)
+    mirror_info = _auto_mirror_to_live_vault(
+        "signal",
+        slug=payload.title or "untitled-signal",
+        title=payload.title or "Untitled Signal",
+        body=(
+            f"**What changed**: {payload.what_changed}\n\n"
+            f"**Why it matters**: {payload.why_it_matters}\n\n"
+            f"**What to watch next**: {payload.what_to_watch_next}\n\n"
+            f"**Summary**: {payload.summary}"
+        ),
+        source_id=payload.source_id,
+        link_ids={
+            "related_evidence_ids": [],
+            "related_source_ids": (
+                [payload.source_id] if payload.source_id else []
+            ),
+        },
+        risk_domains=payload.risk_domains,
+        extra_metadata={
+            "severity": payload.severity,
+            "confidence": payload.confidence,
+            "what_changed": payload.what_changed,
+            "why_it_matters": payload.why_it_matters,
+            "what_to_watch_next": payload.what_to_watch_next,
+        },
+    )
+
+    result = {"ok": True, "signal": signal_to_dict(stored)}
+    if mirror_info.get("mirrored"):
+        result["vault_mirror"] = mirror_info
+    return result
 
 
 def risk_signal_search(
@@ -286,7 +336,7 @@ def risk_digest_store(digest: dict[str, Any]) -> dict[str, Any]:
             upsert_daily_report_note(
                 config.vault_path,
                 report_date=payload.digest_date.isoformat(),
-                report_markdown=payload.body,
+                report_markdown=stored.markdown_full,
                 digest_id=str(stored.id),
                 status=payload.status,
             )
@@ -492,8 +542,42 @@ def risk_evidence_store(evidence: dict[str, Any]) -> dict[str, Any]:
         return _error("validation_error", str(exc))
     except Exception as exc:  # noqa: BLE001
         return _error("database_unavailable", str(exc))
+
+    # Auto-mirror to live vault (best-effort)
+    claim_slug = (payload.claim_text or "untitled-evidence")[:60]
+    mirror_info = _auto_mirror_to_live_vault(
+        "evidence",
+        slug=claim_slug,
+        title=payload.evidence_title or claim_slug,
+        body=(
+            f"**Claim**: {payload.claim_text}\n\n"
+            f"**Type**: {payload.claim_type}\n\n"
+            f"**Evidence URL**: {payload.evidence_url}\n\n"
+            f"**Excerpt**: {payload.evidence_excerpt}\n\n"
+            f"**Confidence**: {payload.confidence}/5\n\n"
+            f"**Supports signal**: {payload.supports_signal}"
+        ),
+        source_id=payload.source_id,
+        link_ids={
+            "related_signal_ids": (
+                [str(payload.signal_id)] if payload.signal_id else []
+            ),
+        },
+        risk_domains=payload.risk_domains,
+        extra_metadata={
+            "confidence": payload.confidence,
+            "needs_review": payload.needs_human_review,
+            "needs_review_reason": (
+                "Needs human review" if payload.needs_human_review else ""
+            ),
+        },
+    )
+
     from frontier_ai_risk_observer.services.evidence import evidence_to_dict
-    return {"ok": True, "evidence": evidence_to_dict(stored)}
+    result = {"ok": True, "evidence": evidence_to_dict(stored)}
+    if mirror_info.get("mirrored"):
+        result["vault_mirror"] = mirror_info
+    return result
 
 
 def risk_evidence_search(
@@ -1192,6 +1276,135 @@ def _source_run_to_dict(run: SourceRun) -> dict[str, Any]:
 
 def _iso(value: Any) -> str | None:
     return value.isoformat() if value is not None else None
+
+
+def _find_active_live_run(config: Any) -> str | None:
+    """Find the most recent active (non-finalized) live run in the vault.
+
+    Scans the live runs directory for run directories that haven't been
+    finalized yet (status: in_progress in frontmatter).
+    """
+    runs_dir = config.vault_path / "AI-Risk-Intelligence" / config.runs_dir_name
+    if not runs_dir.exists():
+        return None
+
+    candidates: list[tuple[str, str]] = []  # (run_id, path)
+    for entry in sorted(runs_dir.iterdir(), reverse=True):
+        if not entry.is_dir():
+            continue
+        log_path = entry / "Live Research Log.md"
+        if not log_path.exists():
+            continue
+        content = log_path.read_text(encoding="utf-8")
+        # Only consider runs that are still in_progress
+        if "status: in_progress" in content or "status: completed" in content:
+            candidates.append((entry.name, content))
+
+    # Prefer in_progress runs; fall back to most recent completed run
+    for run_id, _ in candidates:
+        if "status: in_progress" in _:
+            return run_id
+    # Return most recent completed run if within today
+    if candidates:
+        from datetime import UTC, datetime
+
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
+        for run_id, _ in candidates:
+            if run_id.startswith(today):
+                return run_id
+    return None
+
+
+def _auto_mirror_to_live_vault(
+    note_type: str,
+    slug: str,
+    title: str,
+    body: str,
+    *,
+    source_id: str | None = None,
+    link_ids: dict[str, list[str]] | None = None,
+    risk_domains: list[str] | None = None,
+    extra_metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Best-effort auto-mirror a signal/evidence/candidate note to live vault.
+
+    Called from risk_signal_store, risk_evidence_store, and risk_raw_item_store
+    to automatically create live notes even if Hermes doesn't explicitly call
+    risk_live_note_upsert. Returns info about what was mirrored.
+    """
+    mirror_info: dict[str, Any] = {
+        "mirrored": False,
+        "run_id": None,
+        "note_path": None,
+        "error": None,
+    }
+    try:
+        from frontier_ai_risk_observer.obsidian.live_writer import (
+            LiveVaultConfig,
+            LiveVaultWriter,
+        )
+
+        config = LiveVaultConfig.from_env()
+        if not config.live_logging_enabled:
+            return mirror_info
+
+        run_id = _find_active_live_run(config)
+        if not run_id:
+            return mirror_info
+
+        mirror_info["run_id"] = run_id
+        writer = LiveVaultWriter(config)
+
+        metadata: dict[str, Any] = {"auto_mirrored": True}
+        if source_id:
+            metadata["source_id"] = source_id
+        if link_ids:
+            metadata.update(link_ids)
+        if risk_domains:
+            metadata["risk_domains"] = risk_domains
+        if extra_metadata:
+            metadata.update(extra_metadata)
+
+        # Get today's date for daily_report_date in links
+        from datetime import UTC, datetime
+
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
+        metadata["daily_report_date"] = today
+
+        method_map = {
+            "signal": writer.upsert_signal_note,
+            "evidence": writer.upsert_evidence_note,
+            "candidate": writer.upsert_candidate_note,
+            "source": writer.upsert_source_note,
+        }
+        method = method_map.get(note_type)
+        if method:
+            result = method(run_id, slug, title=title, body=body, metadata=metadata)
+            if result.success:
+                mirror_info["mirrored"] = True
+                from frontier_ai_risk_observer.obsidian.links import note_vault_relative_path
+
+                subdir_map = {
+                    "signal": "Signals",
+                    "evidence": "Evidence",
+                    "candidate": "Candidates",
+                    "source": "Sources",
+                }
+                from frontier_ai_risk_observer.obsidian.markdown import slugify_filename
+
+                subdir = subdir_map[note_type]
+                note_path = (
+                    config.vault_path / "AI-Risk-Intelligence"
+                    / config.runs_dir_name / run_id
+                    / subdir / f"{slugify_filename(slug)}.md"
+                )
+                mirror_info["note_path"] = note_vault_relative_path(
+                    config.vault_path, note_path,
+                )
+    except Exception as exc:  # noqa: BLE001
+        mirror_info["error"] = str(exc)
+
+    return mirror_info
 
 
 def _error(error_type: str, message: str) -> dict[str, Any]:

@@ -43,6 +43,13 @@ def upsert_daily_report_note(
     Creates ``00_Daily/YYYY-MM-DD.md`` with the full report body inside
     generated block markers and a ``## Links`` section for bidirectional
     navigation.
+
+    **Override protection**: If the daily note already contains a full
+    report (body > 200 chars inside generated markers), a shorter
+    ``report_markdown`` will NOT overwrite it. Instead, only the
+    frontmatter and links section are updated. This prevents Hermes from
+    replacing a complete report with a lazy reference like
+    "See digest abc123".
     """
     ai_root = vault_path / "AI-Risk-Intelligence"
     daily_dir = ai_root / "00_Daily"
@@ -77,7 +84,7 @@ def upsert_daily_report_note(
     if run_id:
         live_run_path = f"08_Live_Runs/{run_id}/Live Research Log"
 
-    # Build body with report + links
+    # Build links section
     links_section = format_backlink_section(
         live_run_path=live_run_path,
         signal_paths=signal_note_paths,
@@ -86,10 +93,41 @@ def upsert_daily_report_note(
         source_paths=source_note_paths,
         failure_paths=failure_note_paths,
     )
+
+    # Override protection: don't let a short/lazy report replace a full one
     body = report_markdown + links_section
+    if daily_path.exists() and len(report_markdown.strip()) < 200:
+        existing = daily_path.read_text(encoding="utf-8")
+        if BEGIN_MARKER in existing:
+            end_marker = "<!-- END_AUTO_GENERATED: hermes-ai-risk-observer -->"
+            if end_marker in existing:
+                start = existing.index(BEGIN_MARKER) + len(BEGIN_MARKER)
+                end = existing.index(end_marker)
+                existing_body = existing[start:end].strip()
+                # If existing body is substantial, keep it and only update
+                # frontmatter + append/refresh links
+                if len(existing_body) > 200:
+                    # Replace links section only, keep existing report body
+                    new_body = _replace_links_section(existing_body, links_section)
+                    title = f"Daily Report: {report_date}"
+                    return write_generated_note(
+                        daily_path, frontmatter, new_body, title,
+                    )
 
     title = f"Daily Report: {report_date}"
     return write_generated_note(daily_path, frontmatter, body, title)
+
+
+def _replace_links_section(existing_body: str, new_links_section: str) -> str:
+    """Replace the ## Links section in existing body, preserving the rest.
+
+    If no ## Links section exists, append the new one.
+    """
+    links_marker = "\n## Links"
+    if links_marker in existing_body:
+        idx = existing_body.index(links_marker)
+        return existing_body[:idx] + new_links_section
+    return existing_body + new_links_section
 
 
 def ensure_daily_note_has_body(vault_path: Path, report_date: str) -> bool:

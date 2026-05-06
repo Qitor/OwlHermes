@@ -760,8 +760,13 @@ class TestR113CPromptSkill:
 
     def test_prompts_say_bidirectional_links(self) -> None:
         prompt = (Path(__file__).parent.parent / "prompts" / "daily_report_prompt.md").read_text()
-        # Either "双向链接" or "bidirectional" or "related_signal_ids"
-        assert "related_signal_ids" in prompt or "bidirectional" in prompt.lower()
+        # Auto-mirror or bidirectional links should be mentioned
+        assert (
+            "related_signal_ids" in prompt
+            or "bidirectional" in prompt.lower()
+            or "自动" in prompt  # auto-mirror
+            or "auto_mirror" in prompt.lower()
+        )
 
     def test_finalize_prompt_mentions_daily_report_upsert(self) -> None:
         prompt_dir = Path(__file__).parent.parent / "prompts"

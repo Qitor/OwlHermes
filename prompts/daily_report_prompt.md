@@ -126,12 +126,14 @@
 - `risk_live_run_finalize` — 结束实时研究记录（可传入 `final_report_markdown` 和 `daily_report_date` 直接写入日报）
 - `risk_live_daily_report_upsert` — 将最终日报写入 Obsidian `00_Daily/YYYY-MM-DD.md`
 
+**自动镜像**：当你调用 `risk_signal_store`、`risk_evidence_store`、`risk_raw_item_store` 时，系统会自动将对应的信号/证据/候选笔记镜像到 Obsidian vault。你不需要为每个信号/证据手动调用 `risk_live_note_upsert`——系统已经自动处理。但你仍然可以手动调用来补充或更新笔记内容。
+
 如果实时写入工具可用（`risk_live_run_start` 返回 `live_logging_enabled: true`），请按以下方式使用：
 1. 研究开始时调用 `risk_live_run_start`，**记住返回的 `run_id`**
 2. 每个重要研究步骤用 `risk_live_event_append` 记录（来源选定、候选发现、证据提取、信号存储等），**每次都传入 `run_id`**。如果同时创建了笔记，传入 `note_vault_path` 以在时间线中创建 wikilink
-3. 对持久化的来源/候选/证据/信号用 `risk_live_note_upsert` 写入笔记，**每次都传入 `run_id`**。可传入 `daily_report_date`、`related_signal_ids`、`related_evidence_ids`、`related_candidate_ids`、`related_source_ids`、`risk_domains` 等字段以创建双向链接
-4. 最终简报完成后，调用 `risk_live_daily_report_upsert` 将完整日报写入 Obsidian，**不需要运行 `make obsidian-export`**
-5. 研究结束时调用 `risk_live_run_finalize`，**传入 `run_id`**、`final_report_markdown`（完整简报正文）和 `daily_report_date`
+3. 信号和证据的 Obsidian 笔记会通过 `risk_signal_store` 和 `risk_evidence_store` 自动创建，无需手动调用 `risk_live_note_upsert`
+4. 最终简报完成后，调用 `risk_live_daily_report_upsert` 将**完整日报全文**写入 Obsidian，**不需要运行 `make obsidian-export`**。**必须传入完整的日报 Markdown 正文作为 `report_markdown`，不能只传入摘要或引用（如 "See digest xxx"），否则 Obsidian 中的日报将不完整**
+5. 研究结束时调用 `risk_live_run_finalize`，**传入 `run_id`**、`final_report_markdown`（**完整简报正文**，不是引用）和 `daily_report_date`
 
 **调用顺序（重要）**：
 - `risk_live_run_start` → 获得 `run_id` → 之后所有 live 调用必须传入此 `run_id`

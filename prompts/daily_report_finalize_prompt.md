@@ -110,8 +110,8 @@
 5. 基于已有数据，撰写完整的中文风险简报
 6. **对每条 Top Signal，用 `risk_evidence_store` 存储至少一条支撑证据**。如果信号有证据 URL 但没有已存储的证据项，创建一条。包含 claim_text、evidence_url、evidence_excerpt（如可提取）、confidence、supports_signal=true。如果摘录不可获取，设 needs_human_review=true。
 7. 用 `risk_digest_store` 存储最终简报（status 用 `local_daily_report`）
-8. 如果实时 Obsidian 写入可用，调用 `risk_live_daily_report_upsert` 将最终简报写入 `00_Daily/YYYY-MM-DD.md`。传入 `report_date`、`report_markdown`（完整简报正文）、`run_id`、`status="local_daily_report"`，以及 `signal_note_paths`、`candidate_note_paths`、`evidence_note_paths`、`source_note_paths` 等链接路径
-9. 如果实时研究记录已开始，调用 `risk_live_run_finalize` 结束记录。传入 `run_id`、`final_report_markdown`（完整简报正文）、`daily_report_date`、`signal_note_paths`、`candidate_note_paths`、`evidence_note_paths`、`source_note_paths`、`failure_note_paths`。summary 中包含 `signal_count`、`evidence_count`、`source_count` 等统计
+8. 如果实时 Obsidian 写入可用，调用 `risk_live_daily_report_upsert` 将最终简报写入 `00_Daily/YYYY-MM-DD.md`。**必须传入完整的日报 Markdown 正文作为 `report_markdown`，不能只传入摘要或引用（如 "See digest xxx" 是错误的）**。同时传入 `report_date`、`run_id`、`status="local_daily_report"`，以及 `signal_note_paths`、`candidate_note_paths`、`evidence_note_paths`、`source_note_paths` 等链接路径
+9. 如果实时研究记录已开始，调用 `risk_live_run_finalize` 结束记录。**必须传入完整的日报 Markdown 正文作为 `final_report_markdown`，不能只传入引用**。同时传入 `run_id`、`daily_report_date`、`signal_note_paths`、`candidate_note_paths`、`evidence_note_paths`、`source_note_paths`、`failure_note_paths`。summary 中包含 `signal_count`、`evidence_count`、`source_count` 等统计
 10. 在输出中返回最终中文简报全文
 
 ## 关于超时/未完成

@@ -168,18 +168,20 @@ During a daily report or interactive run, you may use live Obsidian vault tools 
 - `risk_live_run_finalize` — End the live research run with a summary. Accepts `final_report_markdown` and `daily_report_date` to write the daily note immediately.
 - `risk_live_daily_report_upsert` — Write or update the final daily report note in `00_Daily/YYYY-MM-DD.md`. Use when the final report is ready and you want it visible in Obsidian immediately.
 
+**Auto-mirror (R1-13D):**
+
+When live vault is enabled, `risk_signal_store`, `risk_evidence_store`, and `risk_raw_item_store` automatically create corresponding Obsidian notes in the active live run. You do NOT need to manually call `risk_live_note_upsert` for every signal or evidence — the system handles this automatically. You can still manually call `risk_live_note_upsert` to supplement or update note content.
+
 **When to use:**
 
 - At the start of daily-report or interactive mode, call `risk_live_run_start` if available.
 - When selecting a source, append `source_selected`.
 - When starting/completing a source check, append `source_check_started`/`source_check_completed`.
 - When source fails, append `source_failed` and/or upsert a `failure` note.
-- When a candidate is found/stored, append `candidate_found`/`candidate_stored` and upsert a candidate note.
-- When evidence is extracted, append `evidence_extracted` and upsert an evidence note.
-- When a signal is promoted/stored, append `signal_promoted`/`signal_stored` and upsert a signal note.
+- Signal/evidence/candidate notes are auto-mirrored — no manual `risk_live_note_upsert` needed.
 - When digest is stored, append `digest_stored`.
-- When the final report is ready, call `risk_live_daily_report_upsert` to write it to Obsidian immediately.
-- At end, call `risk_live_run_finalize` with `final_report_markdown` and `daily_report_date`.
+- When the final report is ready, call `risk_live_daily_report_upsert` with the **full report markdown** as `report_markdown` (NOT a reference like "See digest xxx").
+- At end, call `risk_live_run_finalize` with `final_report_markdown` (**full report markdown**, NOT a reference) and `daily_report_date`.
 
 **Important:**
 
@@ -189,6 +191,7 @@ During a daily report or interactive run, you may use live Obsidian vault tools 
 - **Do NOT write private chain-of-thought or hidden reasoning into Obsidian.** Live notes should contain observable research state only: source checked, candidate found, evidence excerpt, judgment summary, uncertainty, next step.
 - All live vault writes are constrained to `OBSIDIAN_VAULT_PATH` — no arbitrary file writes.
 - **Live immediate write vs export backfill**: `risk_live_daily_report_upsert` writes the daily note in real time during the run. `make obsidian-export` is for backfill, repair, and full consolidation — not for normal daily UX. You do NOT need to tell the user to run `make obsidian-export` to see the final report.
+- **Full report required**: When calling `risk_live_daily_report_upsert` or `risk_live_run_finalize`, you MUST pass the complete report markdown as `report_markdown` or `final_report_markdown`. Do NOT pass a short reference like "See digest xxx" — this will corrupt the daily note.
 
 ## Modes
 
@@ -248,6 +251,14 @@ This is the production-oriented local mode. Produce today's AI risk daily report
 - Write the report in Chinese per the report structure.
 - Include evidence, uncertainty, helper usage, and follow-up items.
 
+**Finalization sequence (must follow in order):**
+
+1. `risk_digest_store` — store the digest to the backend DB first.
+2. `risk_live_daily_report_upsert` — write the final report to Obsidian vault.
+3. `risk_live_run_finalize` — close the live run with summary and quality score.
+
+Do NOT finalize the live run before the digest is stored — if the digest store fails, fix the schema error and retry before proceeding to steps 2-3.
+
 ### Interactive observation mode
 
 "Use the ai-risk-signal-observer skill in interactive observation mode."
@@ -273,23 +284,43 @@ Same as local daily-report mode, plus:
 
 When scanning multiple sources, use `delegate_task` with browser toolset to deep-read long articles in parallel while you continue scanning other sources. This significantly reduces wall-clock time.
 
+**Recommended parallel workflow:**
+
+1. Run `risk_discovery_helper_preview` for 5-6 sources in parallel.
+2. From helper results, identify 3-4 candidates worth deep-reading.
+3. Launch `delegate_task` for deep-reads **in parallel with** `risk_raw_item_seen_check` — don't wait for deep-reads to finish before checking seen status.
+4. When deep-read subagents complete, extract full UUIDs from their stored items/signals/evidence for use in your own downstream calls.
+5. For any evidence_store calls referencing subagent-created signals, use the **full UUID** (not truncated) from the subagent output.
+
 Rules for subagent delegation:
 - Provide clear extraction goals (what to extract, in what language).
 - Always include the source_id for seen-check and raw_item storage.
 - Subagent signal stores may fail with schema errors — re-store from the main agent if needed.
+- **Capture full UUIDs from subagent results.** Subagents may return truncated IDs in their summary text — always look for the full UUID in the tool_trace or structured output.
 - Apply your own severity/confidence judgment; do not blindly accept subagent assessments.
 - Verify subagent-found URLs before citing them in the digest.
 - Subagents may hit `max_iterations` exit before completing all goals — check their summary for completeness and follow up on any gaps yourself.
 - When a source is known to be blocked (e.g., OpenAI + Cloudflare), tell the subagent upfront so it can pivot to search engines immediately rather than wasting iterations on failed navigations.
 - Subagents using search engines: Yahoo Search works reliably without CAPTCHAs; Google and DuckDuckGo may trigger CAPTCHAs.
 
+### Article quality filters
+
+Not every candidate warrants a deep-read investment:
+
+- **TechCrunch "In Brief" articles**: Short summaries with limited information density. If the topic seems risk-relevant based on the title/excerpt, do a quick browser read yourself rather than delegating a full deep-read. Deep-read investment rarely pays off for these.
+- **Press releases / product announcements**: May lack risk dimension entirely. Scan for safety/RSP/governance mentions before investing deep-read time.
+- **arXiv preprints**: Focus on those with explicit safety/alignment/evaluation methodology. Pure capability papers (new SOTA on benign benchmarks) are low-priority unless they demonstrate capability jumps.
+
 ### Backend tool quirks
 
 - `risk_signal_store` requires a `summary` field (string). Omitting it causes a validation error. The schema also requires `what_changed`, `why_it_matters`, `what_to_watch_next`, `title`, `risk_domains`, `signal_type`, `signal_date`, `severity`, `confidence`, and `evidence_url`. If it fails, retry with the same or slightly simplified payload. Common failures: (1) missing `summary`; (2) passing empty arrays for `source_ids`/`raw_item_ids`.
+- **UUID format requirement**: `risk_evidence_store` and other tools that accept `signal_id` or `raw_item_id` require **full UUID strings** (e.g. `84496323-b568-4a00-b8ed-072236b27295`), NOT truncated/short IDs. Passing a short ID like `"ffc8780d"` causes `"badly formed hexadecimal UUID string"` validation error. When subagents store signals and return IDs, always capture the **full UUID** from their output for use in downstream evidence_store calls.
 - `risk_benchmark_observation_store` is not yet implemented — do not rely on it.
-- `risk_raw_item_store` deduplicates by canonical_url. Same article from a different source_id returns `is_duplicate: true` — do not re-store.
+- `risk_raw_item_store` deduplicates by canonical_url. Same article from a different source_id returns `is_duplicate: true` — do not re-store. Note: `is_duplicate: true` with a valid item in the response means the item was already stored by a subagent — you can use the returned `item.id` for linking evidence.
 - `risk_source_run_record` may report `items_new: 0` even when items were stored — do not rely on it for counting; track new items separately.
 - `risk_discovery_helper_preview` for AXRP returns navigation links (homepage, RSS, Patreon, etc.) instead of episode listings. The helper is not useful for AXRP episode discovery — browse manually or use the RSS feed URL (`https://axrp.net/feed.xml`).
+- **Helper preview limit tuning**: High-volume sources like `arxiv_ai_safety` return very large payloads (~76K chars with `limit=20`). Use `limit=5-10` for arXiv and similar high-volume sources. Lower limits reduce context pressure and are sufficient since you'll deep-read only the top 2-3 candidates anyway.
+- `risk_digest_store` requires a JSON `digest` parameter (not individual top-level fields). The JSON must contain `digest_date` (not `date`), `title`, and `body` (not `digest`). Common mistake: passing `date` and `digest` as top-level keys causes validation error. Correct shape: `{"digest_date": "2026-05-06", "title": "...", "body": "...", "status": "local_daily_report", "run_id": "...", "source_ids": [...], "summary": {...}}`. The `summary` field is a JSON object (not a string) with keys like `new_raw_items`, `new_signals`, `new_evidence_count`, `top_signals`, `sources_checked`, `helper_issues`.
 
 ### Source reliability
 
