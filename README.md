@@ -472,6 +472,8 @@ R1-13 adds live Obsidian vault writing during Hermes research runs, making the v
 
 **R1-13B enhancements:** stateless writer fix (MCP calls are stateless), COT violation detection, schema hardening (Literal types, field descriptions), export linking to live runs, Live Run Index, E2E validation target with requirements.
 
+**R1-13C live vault UX repair:** daily report notes written to `00_Daily/` immediately during live runs; bidirectional links between all note types (daily, signals, evidence, candidates, sources); review queue (`90_Review_Queue/`) updated live; new `risk_live_daily_report_upsert` MCP tool (23 total); `risk_live_run_finalize` extended with `final_report_markdown` for immediate daily note write; `risk_digest_store` mirrors to Obsidian when live vault enabled; runner safety net preserves partial state on interruption. `make obsidian-export` is no longer needed for normal live UX — reserved for backfill, repair, and full consolidation only.
+
 ```bash
 make daily-report-live-vault       # Run daily report with live vault logging
 make daily-report-live-vault-e2e   # Full E2E with requirements validation

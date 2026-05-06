@@ -37,6 +37,7 @@ mcp_servers:
         - risk_live_event_append
         - risk_live_note_upsert
         - risk_live_run_finalize
+        - risk_live_daily_report_upsert
       prompts: false
       resources: false
     env:

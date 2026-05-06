@@ -123,13 +123,15 @@
 - `risk_live_run_start` — 开始一次实时研究记录（如可用）
 - `risk_live_event_append` — 追加研究事件到实时日志
 - `risk_live_note_upsert` — 写入/更新来源、候选、证据或信号的实时笔记
-- `risk_live_run_finalize` — 结束实时研究记录
+- `risk_live_run_finalize` — 结束实时研究记录（可传入 `final_report_markdown` 和 `daily_report_date` 直接写入日报）
+- `risk_live_daily_report_upsert` — 将最终日报写入 Obsidian `00_Daily/YYYY-MM-DD.md`
 
 如果实时写入工具可用（`risk_live_run_start` 返回 `live_logging_enabled: true`），请按以下方式使用：
 1. 研究开始时调用 `risk_live_run_start`，**记住返回的 `run_id`**
-2. 每个重要研究步骤用 `risk_live_event_append` 记录（来源选定、候选发现、证据提取、信号存储等），**每次都传入 `run_id`**
-3. 对持久化的来源/候选/证据/信号用 `risk_live_note_upsert` 写入笔记，**每次都传入 `run_id`**
-4. 研究结束时调用 `risk_live_run_finalize`，**传入 `run_id`**
+2. 每个重要研究步骤用 `risk_live_event_append` 记录（来源选定、候选发现、证据提取、信号存储等），**每次都传入 `run_id`**。如果同时创建了笔记，传入 `note_vault_path` 以在时间线中创建 wikilink
+3. 对持久化的来源/候选/证据/信号用 `risk_live_note_upsert` 写入笔记，**每次都传入 `run_id`**。可传入 `daily_report_date`、`related_signal_ids`、`related_evidence_ids`、`related_candidate_ids`、`related_source_ids`、`risk_domains` 等字段以创建双向链接
+4. 最终简报完成后，调用 `risk_live_daily_report_upsert` 将完整日报写入 Obsidian，**不需要运行 `make obsidian-export`**
+5. 研究结束时调用 `risk_live_run_finalize`，**传入 `run_id`**、`final_report_markdown`（完整简报正文）和 `daily_report_date`
 
 **调用顺序（重要）**：
 - `risk_live_run_start` → 获得 `run_id` → 之后所有 live 调用必须传入此 `run_id`

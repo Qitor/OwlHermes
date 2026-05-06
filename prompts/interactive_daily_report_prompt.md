@@ -46,5 +46,8 @@
 交互模式下，如果实时写入工具可用，建议使用。观察者可以在 Obsidian 中实时查看研究进展。
 - 研究开始时调用 `risk_live_run_start`，**记住返回的 `run_id`**
 - 在暴露判断理由的同时，用 `risk_live_event_append` 和 `risk_live_note_upsert` 记录关键步骤，**每次都传入 `run_id`**
+- 用 `risk_live_note_upsert` 时传入 `daily_report_date`、`related_signal_ids`、`related_evidence_ids` 等字段建立双向链接
 - 不写私密思维链，只记录可观察的研究状态
-- 研究结束时调用 `risk_live_run_finalize`，传入 `run_id` 和总结
+- 最终简报完成后，调用 `risk_live_daily_report_upsert` 将完整日报写入 Obsidian `00_Daily/`
+- 研究结束时调用 `risk_live_run_finalize`，传入 `run_id`、`final_report_markdown`、`daily_report_date` 和总结
+- **不需要运行 `make obsidian-export`** — vault 是实时的

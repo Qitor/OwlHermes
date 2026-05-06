@@ -26,6 +26,7 @@ from frontier_ai_risk_observer.mcp.schemas import (
     DuplicateCandidatesInput,
     EvidenceSearchInput,
     EvidenceStoreInput,
+    LiveDailyReportUpsertInput,
     LiveEventAppendInput,
     LiveNoteUpsertInput,
     LiveRunFinalizeInput,
@@ -270,7 +271,32 @@ def risk_digest_store(digest: dict[str, Any]) -> dict[str, Any]:
         return _error("validation_error", str(exc))
     except Exception as exc:  # noqa: BLE001
         return _error("database_unavailable", str(exc))
-    return {"ok": True, "digest": digest_to_dict(stored)}
+
+    # Best-effort Obsidian mirror when live vault enabled
+    vault_warnings: list[str] = []
+    try:
+        from frontier_ai_risk_observer.obsidian.live_writer import LiveVaultConfig
+
+        config = LiveVaultConfig.from_env()
+        if config.live_logging_enabled:
+            from frontier_ai_risk_observer.obsidian.daily_note import (
+                upsert_daily_report_note,
+            )
+
+            upsert_daily_report_note(
+                config.vault_path,
+                report_date=payload.digest_date.isoformat(),
+                report_markdown=payload.body,
+                digest_id=str(stored.id),
+                status=payload.status,
+            )
+    except Exception as exc:  # noqa: BLE001
+        vault_warnings.append(f"Obsidian mirror failed: {exc}")
+
+    result = {"ok": True, "digest": digest_to_dict(stored)}
+    if vault_warnings:
+        result["vault_warnings"] = vault_warnings
+    return result
 
 
 def risk_digest_search(
@@ -634,6 +660,7 @@ def risk_live_event_append(
     raw_item_id: str | None = None,
     signal_id: str | None = None,
     evidence_id: str | None = None,
+    note_vault_path: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Append a structured event to the live research log and timeline."""
@@ -647,6 +674,7 @@ def risk_live_event_append(
             raw_item_id=raw_item_id,
             signal_id=signal_id,
             evidence_id=evidence_id,
+            note_vault_path=note_vault_path,
             metadata=metadata or {},
         )
     except ValidationError as exc:
@@ -700,6 +728,7 @@ def risk_live_event_append(
                 signal_id=payload.signal_id,
                 evidence_id=payload.evidence_id,
                 metadata=payload.metadata,
+                note_vault_path=payload.note_vault_path,
             )
             result = writer.append_event(payload.run_id, event)
             vault_errors = result.errors
@@ -712,6 +741,7 @@ def risk_live_event_append(
         "ok": True,
         "event_id": event_id,
         "live_logging_enabled": live_logging_enabled,
+        "note_vault_path": payload.note_vault_path,
         "vault_errors": vault_errors,
     }
 
@@ -723,6 +753,16 @@ def risk_live_note_upsert(
     title: str,
     body: str,
     source_id: str | None = None,
+    daily_report_date: str | None = None,
+    related_signal_ids: list[str] | None = None,
+    related_evidence_ids: list[str] | None = None,
+    related_candidate_ids: list[str] | None = None,
+    related_source_ids: list[str] | None = None,
+    risk_domains: list[str] | None = None,
+    confidence: int | None = None,
+    severity: int | None = None,
+    needs_review: bool = False,
+    needs_review_reason: str = "",
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Upsert a live note (source/candidate/evidence/signal) in the research vault."""
@@ -734,6 +774,16 @@ def risk_live_note_upsert(
             title=title,
             body=body,
             source_id=source_id,
+            daily_report_date=daily_report_date,
+            related_signal_ids=related_signal_ids or [],
+            related_evidence_ids=related_evidence_ids or [],
+            related_candidate_ids=related_candidate_ids or [],
+            related_source_ids=related_source_ids or [],
+            risk_domains=risk_domains or [],
+            confidence=confidence,
+            severity=severity,
+            needs_review=needs_review,
+            needs_review_reason=needs_review_reason,
             metadata=metadata or {},
         )
     except ValidationError as exc:
@@ -766,6 +816,7 @@ def risk_live_note_upsert(
     live_logging_enabled = False
     vault_errors: list[str] = []
     notes_written = 0
+    note_vault_path: str | None = None
     try:
         from frontier_ai_risk_observer.obsidian.live_writer import LiveVaultConfig, LiveVaultWriter
 
@@ -773,13 +824,25 @@ def risk_live_note_upsert(
         live_logging_enabled = config.live_logging_enabled
         if live_logging_enabled:
             writer = LiveVaultWriter(config)
+            link_info = {
+                "daily_report_date": payload.daily_report_date,
+                "related_signal_ids": payload.related_signal_ids,
+                "related_evidence_ids": payload.related_evidence_ids,
+                "related_candidate_ids": payload.related_candidate_ids,
+                "related_source_ids": payload.related_source_ids,
+                "risk_domains": payload.risk_domains,
+                "confidence": payload.confidence,
+                "severity": payload.severity,
+                "needs_review": payload.needs_review,
+                "needs_review_reason": payload.needs_review_reason,
+            }
             if payload.note_type == "failure":
                 result = writer.record_failure(
                     payload.run_id,
                     source_id=payload.slug,
                     failure_type="failure",
                     message=payload.body,
-                    metadata=payload.metadata,
+                    metadata={**payload.metadata, **link_info},
                 )
             else:
                 method_map = {
@@ -794,10 +857,30 @@ def risk_live_note_upsert(
                     payload.slug,
                     title=payload.title,
                     body=payload.body,
-                    metadata=payload.metadata,
+                    metadata={**payload.metadata, **link_info},
                 )
             notes_written = result.notes_written + result.notes_updated
             vault_errors = result.errors
+
+            # Compute the vault-relative path for the created note
+            from frontier_ai_risk_observer.obsidian.links import note_vault_relative_path
+
+            subdir_map = {
+                "source": "Sources",
+                "candidate": "Candidates",
+                "evidence": "Evidence",
+                "signal": "Signals",
+            }
+            if payload.note_type in subdir_map:
+                from frontier_ai_risk_observer.obsidian.markdown import slugify_filename
+
+                subdir = subdir_map[payload.note_type]
+                note_path = (
+                    config.vault_path / "AI-Risk-Intelligence"
+                    / config.runs_dir_name / payload.run_id
+                    / subdir / f"{slugify_filename(payload.slug)}.md"
+                )
+                note_vault_path = note_vault_relative_path(config.vault_path, note_path)
     except ValueError as exc:
         vault_errors.append(str(exc))
     except Exception as exc:
@@ -810,6 +893,7 @@ def risk_live_note_upsert(
         "slug": payload.slug,
         "notes_written": notes_written,
         "live_logging_enabled": live_logging_enabled,
+        "note_vault_path": note_vault_path,
         "vault_errors": vault_errors,
     }
 
@@ -817,10 +901,31 @@ def risk_live_note_upsert(
 def risk_live_run_finalize(
     run_id: str,
     summary: dict[str, Any] | None = None,
+    final_report_markdown: str | None = None,
+    digest_id: str | None = None,
+    daily_report_date: str | None = None,
+    quality_score: int | None = None,
+    signal_note_paths: list[str] | None = None,
+    candidate_note_paths: list[str] | None = None,
+    evidence_note_paths: list[str] | None = None,
+    source_note_paths: list[str] | None = None,
+    failure_note_paths: list[str] | None = None,
 ) -> dict[str, Any]:
     """Finalize a live Obsidian research run."""
     try:
-        payload = LiveRunFinalizeInput(run_id=run_id, summary=summary or {})
+        payload = LiveRunFinalizeInput(
+            run_id=run_id,
+            summary=summary or {},
+            final_report_markdown=final_report_markdown,
+            digest_id=digest_id,
+            daily_report_date=daily_report_date,
+            quality_score=quality_score,
+            signal_note_paths=signal_note_paths or [],
+            candidate_note_paths=candidate_note_paths or [],
+            evidence_note_paths=evidence_note_paths or [],
+            source_note_paths=source_note_paths or [],
+            failure_note_paths=failure_note_paths or [],
+        )
     except ValidationError as exc:
         return _error("validation_error", str(exc))
 
@@ -847,6 +952,8 @@ def risk_live_run_finalize(
     # Finalize Obsidian vault if live logging enabled
     live_logging_enabled = False
     vault_errors: list[str] = []
+    daily_note_path: str | None = None
+    linked_notes_summary: dict[str, int] = {}
     try:
         from frontier_ai_risk_observer.obsidian.live_writer import LiveVaultConfig, LiveVaultWriter
 
@@ -854,8 +961,33 @@ def risk_live_run_finalize(
         live_logging_enabled = config.live_logging_enabled
         if live_logging_enabled:
             writer = LiveVaultWriter(config)
-            result = writer.finalize_run(payload.run_id, summary=payload.summary)
+            result = writer.finalize_run(
+                payload.run_id,
+                summary=payload.summary,
+                final_report_markdown=payload.final_report_markdown,
+                digest_id=payload.digest_id,
+                daily_report_date=payload.daily_report_date,
+                quality_score=payload.quality_score,
+                signal_note_paths=payload.signal_note_paths,
+                candidate_note_paths=payload.candidate_note_paths,
+                evidence_note_paths=payload.evidence_note_paths,
+                source_note_paths=payload.source_note_paths,
+                failure_note_paths=payload.failure_note_paths,
+            )
             vault_errors = result.errors
+
+            # If daily report was written, compute its path
+            if payload.daily_report_date:
+                daily_note_path = (
+                    f"00_Daily/{payload.daily_report_date}.md"
+                )
+                linked_notes_summary = {
+                    "signals": len(payload.signal_note_paths),
+                    "candidates": len(payload.candidate_note_paths),
+                    "evidence": len(payload.evidence_note_paths),
+                    "sources": len(payload.source_note_paths),
+                    "failures": len(payload.failure_note_paths),
+                }
     except ValueError as exc:
         vault_errors.append(str(exc))
     except Exception as exc:
@@ -866,7 +998,129 @@ def risk_live_run_finalize(
         "run_id": payload.run_id,
         "event_id": event_id,
         "live_logging_enabled": live_logging_enabled,
+        "daily_note_path": daily_note_path,
+        "linked_notes_summary": linked_notes_summary,
         "vault_errors": vault_errors,
+    }
+
+
+def risk_live_daily_report_upsert(
+    report_date: str,
+    title: str = "",
+    report_markdown: str = "",
+    digest_id: str | None = None,
+    run_id: str | None = None,
+    status: str = "draft",
+    summary: dict[str, Any] | None = None,
+    signal_note_paths: list[str] | None = None,
+    candidate_note_paths: list[str] | None = None,
+    evidence_note_paths: list[str] | None = None,
+    source_note_paths: list[str] | None = None,
+    failure_note_paths: list[str] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Write or update the final daily report note in the Obsidian vault.
+
+    When live vault logging is enabled, writes the full report to
+    ``00_Daily/YYYY-MM-DD.md`` immediately. This is the primary tool
+    for ensuring the daily report is visible in Obsidian without
+    requiring ``make obsidian-export``.
+    """
+    try:
+        payload = LiveDailyReportUpsertInput(
+            report_date=report_date,
+            title=title,
+            report_markdown=report_markdown,
+            digest_id=digest_id,
+            run_id=run_id,
+            status=status,
+            summary=summary or {},
+            signal_note_paths=signal_note_paths or [],
+            candidate_note_paths=candidate_note_paths or [],
+            evidence_note_paths=evidence_note_paths or [],
+            source_note_paths=source_note_paths or [],
+            failure_note_paths=failure_note_paths or [],
+            metadata=metadata or {},
+        )
+    except ValidationError as exc:
+        return _error("validation_error", str(exc))
+
+    # Store research event in DB
+    try:
+        with _session_scope() as session:
+            from frontier_ai_risk_observer.services.live_research import (
+                store_research_event,
+            )
+
+            stored = store_research_event(
+                session,
+                run_id=payload.run_id or "daily_report",
+                event_type="digest_stored",
+                title=payload.title or f"Daily Report {payload.report_date}",
+                metadata=payload.summary,
+            )
+            event_id = str(stored.id)
+    except (ValidationError, ValueError) as exc:
+        return _error("validation_error", str(exc))
+    except Exception as exc:
+        return _error("database_unavailable", str(exc))
+
+    # Write to Obsidian vault if live logging enabled
+    live_logging_enabled = False
+    vault_errors: list[str] = []
+    daily_note_path: str | None = None
+    live_run_path: str | None = None
+    linked_notes_count = 0
+
+    try:
+        from frontier_ai_risk_observer.obsidian.live_writer import LiveVaultConfig
+
+        config = LiveVaultConfig.from_env()
+        live_logging_enabled = config.live_logging_enabled
+        if live_logging_enabled:
+            from frontier_ai_risk_observer.obsidian.daily_note import (
+                upsert_daily_report_note,
+            )
+
+            write_result = upsert_daily_report_note(
+                config.vault_path,
+                report_date=payload.report_date,
+                report_markdown=payload.report_markdown,
+                digest_id=payload.digest_id,
+                run_id=payload.run_id,
+                status=payload.status,
+                signal_note_paths=payload.signal_note_paths,
+                candidate_note_paths=payload.candidate_note_paths,
+                evidence_note_paths=payload.evidence_note_paths,
+                source_note_paths=payload.source_note_paths,
+                failure_note_paths=payload.failure_note_paths,
+                metadata=payload.metadata,
+            )
+            daily_note_path = str(write_result.path)
+            linked_notes_count = (
+                len(payload.signal_note_paths)
+                + len(payload.candidate_note_paths)
+                + len(payload.evidence_note_paths)
+                + len(payload.source_note_paths)
+                + len(payload.failure_note_paths)
+            )
+            if payload.run_id:
+                live_run_path = (
+                    f"08_Live_Runs/{payload.run_id}/Live Research Log"
+                )
+    except ValueError as exc:
+        vault_errors.append(str(exc))
+    except Exception as exc:
+        vault_errors.append(str(exc))
+
+    return {
+        "ok": True,
+        "event_id": event_id,
+        "daily_note_path": daily_note_path,
+        "live_run_path": live_run_path,
+        "linked_notes_count": linked_notes_count,
+        "live_logging_enabled": live_logging_enabled,
+        "warnings": vault_errors,
     }
 
 
@@ -967,6 +1221,7 @@ MCP_TOOL_FUNCTIONS = [
     risk_live_event_append,
     risk_live_note_upsert,
     risk_live_run_finalize,
+    risk_live_daily_report_upsert,
 ]
 
 

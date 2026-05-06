@@ -93,6 +93,7 @@ class LiveEvent:
     evidence_id: str | None = None
     timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     metadata: dict[str, Any] = field(default_factory=dict)
+    note_vault_path: str | None = None
 
 
 @dataclass
@@ -279,6 +280,10 @@ class LiveVaultWriter:
         self, run_id: str, events: list[LiveEvent]
     ) -> LiveWriteResult:
         """Write events to the log and timeline files."""
+        from frontier_ai_risk_observer.obsidian.links import (
+            format_timeline_entry_with_link,
+        )
+
         run_dir = self._active_runs.get(run_id)
         if not run_dir:
             return LiveWriteResult(success=False, errors=[f"Run {run_id} not found"])
@@ -289,8 +294,15 @@ class LiveVaultWriter:
         written = 0
         for event in events:
             entry = self._format_event_entry(event)
-            ts_full = event.timestamp.strftime("%H:%M:%S")
-            timeline_entry = f"- **{ts_full}** [{event.event_type}] {event.title}"
+
+            # Build timeline entry with optional wikilink
+            if event.note_vault_path:
+                timeline_entry = format_timeline_entry_with_link(
+                    event.event_type, event.title, event.note_vault_path
+                )
+            else:
+                ts_full = event.timestamp.strftime("%H:%M:%S")
+                timeline_entry = f"- **{ts_full}** [{event.event_type}] {event.title}"
 
             # Read existing content and append
             if log_path.exists():
@@ -403,8 +415,15 @@ class LiveVaultWriter:
         if metadata:
             fm.update(metadata)
 
+        # Build bidirectional links section
+        links_section = self._build_backlinks(run_id, subdir, filename_slug, metadata)
+        full_body = body + links_section
+
         is_update = note_path.exists()
-        write_generated_note(note_path, fm, body, title)
+        write_generated_note(note_path, fm, full_body, title)
+
+        # Review queue integration (best-effort)
+        self._check_review_queue(run_id, subdir, filename_slug, metadata)
 
         result = LiveWriteResult(success=True)
         if is_update:
@@ -412,6 +431,133 @@ class LiveVaultWriter:
         else:
             result.notes_written = 1
         return result
+
+    def _build_backlinks(
+        self,
+        run_id: str,
+        subdir: str,
+        filename_slug: str,
+        metadata: dict[str, Any] | None,
+    ) -> str:
+        """Build a ## Links section with bidirectional links for a note."""
+        from frontier_ai_risk_observer.obsidian.links import (
+            format_backlink_section,
+        )
+
+        meta = metadata or {}
+
+        # Compute live run path
+        live_run_path = f"08_Live_Runs/{run_id}/Live Research Log"
+
+        # Compute daily note path
+        daily_note_path: str | None = None
+        daily_date = meta.get("daily_report_date")
+        if daily_date:
+            daily_note_path = f"00_Daily/{daily_date}"
+
+        # Compute related note paths from metadata IDs
+        signal_paths: list[str] = []
+        for sid in meta.get("related_signal_ids", []):
+            signal_paths.append(f"08_Live_Runs/{run_id}/Signals/{sid}")
+
+        candidate_paths: list[str] = []
+        for cid in meta.get("related_candidate_ids", []):
+            candidate_paths.append(f"08_Live_Runs/{run_id}/Candidates/{cid}")
+
+        evidence_paths: list[str] = []
+        for eid in meta.get("related_evidence_ids", []):
+            evidence_paths.append(f"08_Live_Runs/{run_id}/Evidence/{eid}")
+
+        source_paths: list[str] = []
+        source_id = meta.get("source_id")
+        if source_id:
+            source_paths.append(f"08_Live_Runs/{run_id}/Sources/{source_id}")
+        for sid in meta.get("related_source_ids", []):
+            source_paths.append(f"08_Live_Runs/{run_id}/Sources/{sid}")
+
+        # Risk domains
+        risk_domain_paths: list[str] = []
+        for rd in meta.get("risk_domains", []):
+            risk_domain_paths.append(f"05_Risk_Domains/{rd}")
+
+        return format_backlink_section(
+            daily_note_path=daily_note_path,
+            live_run_path=live_run_path,
+            signal_paths=signal_paths or None,
+            candidate_paths=candidate_paths or None,
+            evidence_paths=evidence_paths or None,
+            source_paths=source_paths or None,
+            risk_domains=risk_domain_paths or None,
+        )
+
+    def _check_review_queue(
+        self,
+        run_id: str,
+        subdir: str,
+        filename_slug: str,
+        metadata: dict[str, Any] | None,
+    ) -> None:
+        """Best-effort review queue integration after writing a note."""
+        meta = metadata or {}
+        note_type = subdir.lower().rstrip("s")
+
+        try:
+            from frontier_ai_risk_observer.obsidian.daily_note import (
+                upsert_review_queue_note,
+            )
+
+            # Signal without evidence → needs-review
+            if note_type == "signal":
+                has_evidence = bool(meta.get("related_evidence_ids"))
+                missing_fields = []
+                for field_name in ("what_changed", "why_it_matters", "what_to_watch_next"):
+                    if not meta.get(field_name):
+                        missing_fields.append(field_name)
+                if not has_evidence or missing_fields:
+                    if not has_evidence:
+                        reason = "Signal lacks evidence"
+                    else:
+                        reason = f"Missing: {', '.join(missing_fields)}"
+                    upsert_review_queue_note(
+                        self.config.vault_path,
+                        "needs-review",
+                        [{
+                            "title": filename_slug,
+                            "reason": reason,
+                            "source": meta.get("source_id", ""),
+                        }],
+                    )
+
+            # Evidence with needs_human_review → needs-review
+            if note_type == "evidence" and meta.get("needs_review"):
+                review_reason = meta.get(
+                    "needs_review_reason", "Needs human review"
+                )
+                upsert_review_queue_note(
+                    self.config.vault_path,
+                    "needs-review",
+                    [{
+                        "title": filename_slug,
+                        "reason": review_reason,
+                        "source": meta.get("source_id", ""),
+                    }],
+                )
+
+            # Failure note → failed-sources
+            if note_type == "failure":
+                fail_type = meta.get("failure_type", "Source check failed")
+                upsert_review_queue_note(
+                    self.config.vault_path,
+                    "failed-sources",
+                    [{
+                        "title": filename_slug,
+                        "reason": fail_type,
+                        "source": meta.get("source_id", ""),
+                    }],
+                )
+        except Exception:  # noqa: BLE001
+            # Review queue is best-effort; don't break note writing
+            pass
 
     def record_failure(
         self,
@@ -459,6 +605,9 @@ class LiveVaultWriter:
                 fm.update(metadata)
             write_generated_note(failures_path, fm, entry, "Failures")
 
+        # Add to review queue (best-effort)
+        self._check_review_queue(run_id, "Failures", source_id, metadata)
+
         return LiveWriteResult(success=True, notes_written=1)
 
     def finalize_run(
@@ -466,6 +615,15 @@ class LiveVaultWriter:
         run_id: str,
         summary: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
+        final_report_markdown: str | None = None,
+        digest_id: str | None = None,
+        daily_report_date: str | None = None,
+        quality_score: int | None = None,
+        signal_note_paths: list[str] | None = None,
+        candidate_note_paths: list[str] | None = None,
+        evidence_note_paths: list[str] | None = None,
+        source_note_paths: list[str] | None = None,
+        failure_note_paths: list[str] | None = None,
     ) -> LiveWriteResult:
         """Finalize a live research run."""
         if not self.config.live_logging_enabled:
@@ -480,6 +638,39 @@ class LiveVaultWriter:
         # Flush any remaining buffer
         if self.config.flush_mode == "buffered":
             self.flush_buffer(run_id)
+
+        # If final_report_markdown provided, write/update daily note
+        if final_report_markdown and daily_report_date:
+            try:
+                from frontier_ai_risk_observer.obsidian.daily_note import (
+                    upsert_daily_report_note,
+                )
+
+                upsert_daily_report_note(
+                    self.config.vault_path,
+                    report_date=daily_report_date,
+                    report_markdown=final_report_markdown,
+                    digest_id=digest_id,
+                    run_id=run_id,
+                    status="local_daily_report",
+                    quality_score=quality_score,
+                    signal_note_paths=signal_note_paths,
+                    candidate_note_paths=candidate_note_paths,
+                    evidence_note_paths=evidence_note_paths,
+                    source_note_paths=source_note_paths,
+                    failure_note_paths=failure_note_paths,
+                )
+            except Exception:  # noqa: BLE001
+                # Best-effort; don't break finalization
+                pass
+
+        # Build daily note link for log and timeline
+        daily_note_wikilink = ""
+        if daily_report_date:
+            daily_note_wikilink = (
+                f" — Final report: "
+                f"{wikilink(f'00_Daily/{daily_report_date}', daily_report_date)}"
+            )
 
         # Update Live Research Log
         log_path = run_dir / "Live Research Log.md"
@@ -507,6 +698,8 @@ class LiveVaultWriter:
             if summary:
                 for k, v in summary.items():
                     summary_parts.append(f"- **{k}**: {v}")
+            if daily_note_wikilink:
+                summary_parts.append(daily_note_wikilink[3:])
             summary_parts.append(f"\nFinalized at: {now_iso}\n")
 
             summary_text = "\n".join(summary_parts)
@@ -517,6 +710,24 @@ class LiveVaultWriter:
                 existing += summary_text
 
             atomic_write(log_path, existing)
+
+        # Update Timeline with finalization event
+        timeline_path = run_dir / "Timeline.md"
+        if timeline_path.exists():
+            ts = datetime.now(UTC).strftime("%H:%M:%S")
+            if daily_report_date:
+                daily_link = wikilink(
+                    f"00_Daily/{daily_report_date}", "Final Daily Report"
+                )
+                tl_entry = f"- **{ts}** [run_finalized] {daily_link}"
+            else:
+                tl_entry = f"- **{ts}** [run_finalized] Run completed"
+
+            existing_tl = timeline_path.read_text(encoding="utf-8")
+            if "<!-- END_AUTO_GENERATED" in existing_tl:
+                marker = "<!-- END_AUTO_GENERATED: hermes-ai-risk-observer -->"
+                existing_tl = existing_tl.replace(marker, f"{tl_entry}\n{marker}")
+                atomic_write(timeline_path, existing_tl)
 
         # Update daily note with completion
         if self.config.append_to_daily:

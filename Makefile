@@ -220,7 +220,6 @@ daily-report-live-vault:
 	fi
 	DATABASE_URL="$(DRYRUN_DB_URL)" $(PYTHON) scripts/daily_report.py --run --live-vault
 	$(MAKE) report-quality-check
-	$(MAKE) obsidian-export
 	$(MAKE) live-vault-inspect
 
 live-vault-inspect:
@@ -240,12 +239,11 @@ daily-report-live-vault-e2e:
 		echo "  OBSIDIAN_VAULT_PATH=~/Documents/airo make daily-report-live-vault-e2e"; \
 		exit 1; \
 	fi
-	@echo "=== R1-13B: Live Vault E2E Validation ==="
+	@echo "=== R1-13C: Live Vault E2E Validation ==="
 	OBSIDIAN_LIVE_LOGGING_ENABLED=true DATABASE_URL="$(DRYRUN_DB_URL)" $(PYTHON) scripts/daily_report.py --run --live-vault
 	$(MAKE) report-quality-check
-	$(MAKE) obsidian-export
 	@echo "=== Inspecting live vault (with requirements) ==="
-	$(PYTHON) scripts/inspect_live_vault.py --vault $${OBSIDIAN_VAULT_PATH} --latest --require-events 1 --require-note-types source,candidate,evidence,signal --db-check
+	$(PYTHON) scripts/inspect_live_vault.py --vault $${OBSIDIAN_VAULT_PATH} --latest --require-events 1 --require-note-types source,candidate,evidence,signal --require-daily-note --require-daily-body --db-check
 	@echo "=== Inspecting Obsidian vault ==="
 	$(MAKE) obsidian-inspect
-	@echo "=== R1-13B: E2E Validation Complete ==="
+	@echo "=== R1-13C: E2E Validation Complete ==="

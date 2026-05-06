@@ -36,6 +36,15 @@ class LiveRunInspection:
     db_event_type_counts: dict[str, int] = field(default_factory=dict)
     db_mismatch: bool = False
     errors: list[str] = field(default_factory=list)
+    # R1-13C: daily note and bidirectional link checks
+    daily_note_exists: bool = False
+    daily_note_has_body: bool = False
+    daily_note_links_to_live_run: bool = False
+    live_run_links_to_daily: bool = False
+    manual_export_required: bool = True
+    bidirectional_links_complete: bool = False
+    review_queue_count: int = 0
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -139,7 +148,141 @@ def inspect_live_run(
     # Deduplicate COT violations
     result.cot_violations = list(set(result.cot_violations))
 
+    # R1-13C: Daily note and bidirectional link checks
+    _check_daily_note_and_links(run_path, result)
+
+    # Review queue count
+    _check_review_queue(run_path, result)
+
+    # Warnings for UX issues
+    _compute_ux_warnings(result)
+
     return result
+
+
+def _check_daily_note_and_links(
+    run_path: Path,
+    result: LiveRunInspection,
+) -> None:
+    """Check daily note existence, body content, and bidirectional links."""
+    # Find the vault AI-Risk-Intelligence root
+    # run_path is like vault/AI-Risk-Intelligence/08_Live_Runs/YYYY-MM-DD_HHMMSS
+    ai_root = run_path.parent.parent
+    run_id = run_path.name
+
+    # Extract date from run_id (format: YYYY-MM-DD_HHMMSS)
+    date_part = run_id.split("_")[0] if "_" in run_id else ""
+    if not date_part:
+        return
+
+    daily_path = ai_root / "00_Daily" / f"{date_part}.md"
+    result.daily_note_exists = daily_path.exists()
+
+    if not result.daily_note_exists:
+        return
+
+    content = daily_path.read_text(encoding="utf-8")
+
+    # Check if daily note has body inside generated markers
+    begin_marker = "<!-- BEGIN_AUTO_GENERATED: hermes-ai-risk-observer -->"
+    end_marker = "<!-- END_AUTO_GENERATED: hermes-ai-risk-observer -->"
+    if begin_marker in content and end_marker in content:
+        start = content.index(begin_marker) + len(begin_marker)
+        end = content.index(end_marker)
+        body = content[start:end].strip()
+        result.daily_note_has_body = len(body) > 0
+    else:
+        # Has content but no markers — might be from manual export
+        result.daily_note_has_body = len(content.strip()) > 100
+
+    # Check if daily note links to this live run
+    result.daily_note_links_to_live_run = run_id in content
+
+    # Check if live run links back to daily note
+    log_path = run_path / "Live Research Log.md"
+    if log_path.exists():
+        log_content = log_path.read_text(encoding="utf-8")
+        result.live_run_links_to_daily = (
+            date_part in log_content
+            or f"00_Daily/{date_part}" in log_content
+        )
+
+    # Compute manual_export_required
+    result.manual_export_required = not result.daily_note_has_body
+
+    # Check bidirectional link completeness
+    _check_bidirectional_links(run_path, result, ai_root, date_part)
+
+
+def _check_bidirectional_links(
+    run_path: Path,
+    result: LiveRunInspection,
+    ai_root: Path,
+    date_part: str,
+) -> None:
+    """Check if intermediate notes have proper bidirectional links."""
+    all_linked = True
+
+    # Check signal notes for links sections
+    signals_dir = run_path / "Signals"
+    if signals_dir.exists():
+        for note in signals_dir.glob("*.md"):
+            content = note.read_text(encoding="utf-8")
+            if "## Links" not in content:
+                all_linked = False
+                break
+
+    # Check evidence notes
+    evidence_dir = run_path / "Evidence"
+    if evidence_dir.exists():
+        for note in evidence_dir.glob("*.md"):
+            content = note.read_text(encoding="utf-8")
+            if "## Links" not in content:
+                all_linked = False
+                break
+
+    # Check candidate notes
+    candidates_dir = run_path / "Candidates"
+    if candidates_dir.exists():
+        for note in candidates_dir.glob("*.md"):
+            content = note.read_text(encoding="utf-8")
+            if "## Links" not in content:
+                all_linked = False
+                break
+
+    result.bidirectional_links_complete = all_linked
+
+
+def _check_review_queue(
+    run_path: Path,
+    result: LiveRunInspection,
+) -> None:
+    """Check review queue entries."""
+    ai_root = run_path.parent.parent
+    queue_dir = ai_root / "90_Review_Queue"
+    if not queue_dir.exists():
+        return
+
+    count = 0
+    for queue_file in queue_dir.glob("*.md"):
+        content = queue_file.read_text(encoding="utf-8")
+        # Count list items
+        for line in content.split("\n"):
+            if line.startswith("- **"):
+                count += 1
+    result.review_queue_count = count
+
+
+def _compute_ux_warnings(result: LiveRunInspection) -> None:
+    """Compute UX warnings based on inspection results."""
+    if result.log_exists and not result.daily_note_exists:
+        result.warnings.append("Live run exists but no daily note")
+    if result.daily_note_exists and not result.daily_note_has_body:
+        result.warnings.append("Daily note has only metadata, no report body")
+    if result.signal_notes > 0 and result.evidence_notes == 0:
+        result.warnings.append("Signal notes exist but no evidence notes")
+    if result.failures_count > 0 and result.review_queue_count == 0:
+        result.warnings.append("Failures exist but absent from review queue")
 
 
 def _check_db_events(
@@ -247,6 +390,14 @@ def main() -> None:
         "--db-check", action="store_true",
         help="Also check ResearchEvent rows in SQLite DB",
     )
+    parser.add_argument(
+        "--require-daily-note", action="store_true",
+        help="Fail if daily note does not exist for the run date",
+    )
+    parser.add_argument(
+        "--require-daily-body", action="store_true",
+        help="Fail if daily note exists but has no report body",
+    )
     args = parser.parse_args()
 
     vault_str = args.vault or os.environ.get(
@@ -310,6 +461,13 @@ def _print_run(inspection: LiveRunInspection, json_mode: bool) -> None:
     print(f"    Evidence: {inspection.evidence_notes}  Signals: {inspection.signal_notes}")
     print(f"    Failures: {inspection.failures_count}  Finalized: {inspection.finalized}")
     print(f"    Markers: {inspection.generated_markers_present}")
+    print(f"    Daily note exists: {inspection.daily_note_exists}")
+    print(f"    Daily note has body: {inspection.daily_note_has_body}")
+    print(f"    Daily→Live link: {inspection.daily_note_links_to_live_run}")
+    print(f"    Live→Daily link: {inspection.live_run_links_to_daily}")
+    print(f"    Bidirectional links complete: {inspection.bidirectional_links_complete}")
+    print(f"    Manual export required: {inspection.manual_export_required}")
+    print(f"    Review queue items: {inspection.review_queue_count}")
     if inspection.event_type_counts:
         print(f"    Note type counts: {inspection.event_type_counts}")
     if inspection.db_event_count > 0:
@@ -321,6 +479,8 @@ def _print_run(inspection: LiveRunInspection, json_mode: bool) -> None:
         print(f"    COT VIOLATIONS: {inspection.cot_violations}")
     if inspection.missing_note_types:
         print(f"    Missing note types: {inspection.missing_note_types}")
+    if inspection.warnings:
+        print(f"    UX WARNINGS: {inspection.warnings}")
     if inspection.errors:
         print(f"    Errors: {inspection.errors}")
 
@@ -354,6 +514,12 @@ def _check_requirements(
             count = inspection.event_type_counts.get(note_type, 0)
             if count == 0:
                 failures.append(f"Missing note type: {note_type}")
+
+    if args.require_daily_note and not inspection.daily_note_exists:
+        failures.append("Daily note does not exist for the run date")
+
+    if args.require_daily_body and not inspection.daily_note_has_body:
+        failures.append("Daily note exists but has no report body")
 
     if failures:
         print("\n  REQUIREMENT FAILURES:")

@@ -118,7 +118,7 @@ Two notes in `90_Review_Queue/`:
 
 ## MCP Tool Count
 
-With R1-13, the MCP server exposes 22 tools (was 18):
+With R1-13C, the MCP server exposes 23 tools (was 18):
 
 | # | Tool | Added |
 |---|------|-------|
@@ -132,6 +132,7 @@ With R1-13, the MCP server exposes 22 tools (was 18):
 | 20 | `risk_live_event_append` | R1-13 |
 | 21 | `risk_live_note_upsert` | R1-13 |
 | 22 | `risk_live_run_finalize` | R1-13 |
+| 23 | `risk_live_daily_report_upsert` | R1-13C |
 
 ## R1-12B: Real E2E Vault Population Validation
 

@@ -108,6 +108,10 @@ class RunSummary:
     small_model_name: str = ""
     live_vault_enabled: bool = False
     live_run_dir: str = ""
+    daily_note_written_by_hermes: bool = False
+    daily_note_written_by_runner: bool = False
+    daily_note_path: str = ""
+    manual_export_required_for_final_report: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -901,6 +905,31 @@ def main() -> None:
                 latest = get_latest_live_run_dir(Path(vault_path))
                 if latest:
                     summary.live_run_dir = str(latest)
+
+            # Runner safety net: ensure daily note has body
+            if summary.daily_report_completed and vault_path:
+                try:
+                    from frontier_ai_risk_observer.obsidian.daily_note import (
+                        ensure_daily_note_has_body,
+                        upsert_daily_report_note,
+                    )
+                    today = datetime.now().strftime("%Y-%m-%d")
+                    summary.daily_note_path = f"00_Daily/{today}.md"
+                    if ensure_daily_note_has_body(Path(vault_path), today):
+                        summary.daily_note_written_by_hermes = True
+                        summary.manual_export_required_for_final_report = False
+                    else:
+                        report_path = run_dir / "daily_report.md"
+                        if report_path.exists():
+                            report_text = report_path.read_text(encoding="utf-8")
+                            upsert_daily_report_note(
+                                Path(vault_path), today, report_text,
+                                status="local_daily_report",
+                            )
+                            summary.daily_note_written_by_runner = True
+                            summary.manual_export_required_for_final_report = False
+                except Exception as exc:  # noqa: BLE001
+                    summary.known_issues.append(f"Runner safety net failed: {exc}")
         _write_summary(run_dir, summary)
 
         print("\n=== Post-Run Inspection ===")

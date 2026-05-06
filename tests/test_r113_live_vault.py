@@ -569,7 +569,7 @@ class TestMCPServerRegistration:
     def test_tool_count(self):
         from frontier_ai_risk_observer.mcp.server import MCP_TOOL_FUNCTIONS
 
-        assert len(MCP_TOOL_FUNCTIONS) == 22
+        assert len(MCP_TOOL_FUNCTIONS) == 23
 
     def test_live_tools_registered(self):
         from frontier_ai_risk_observer.mcp.server import MCP_TOOL_FUNCTIONS
@@ -701,7 +701,7 @@ class TestDocs:
 
     def test_docs_23_updated_tool_count(self):
         content = Path("docs/23_obsidian_intelligence_vault.md").read_text(encoding="utf-8")
-        assert "22 tools" in content
+        assert "23 tools" in content
         assert "risk_live_run_start" in content
 
 
@@ -845,6 +845,8 @@ class TestR113BInspectEnhancements:
             require_events=5,
             require_finalized=True,
             require_note_types="source,candidate,evidence,signal",
+            require_daily_note=False,
+            require_daily_body=False,
         )
         # Should fail: not enough events, not finalized, missing evidence
         try:

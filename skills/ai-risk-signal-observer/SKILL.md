@@ -163,9 +163,10 @@ During a daily report or interactive run, you may use live Obsidian vault tools 
 **Live vault tools:**
 
 - `risk_live_run_start` — Start a live research run. Creates a run directory in the Obsidian vault.
-- `risk_live_event_append` — Append a research event (source selected, candidate found, evidence extracted, signal stored, etc.).
-- `risk_live_note_upsert` — Write or update a source, candidate, evidence, or signal note within the live run.
-- `risk_live_run_finalize` — End the live research run with a summary.
+- `risk_live_event_append` — Append a research event (source selected, candidate found, evidence extracted, signal stored, etc.). Supports `note_vault_path` for timeline wikilinks.
+- `risk_live_note_upsert` — Write or update a source, candidate, evidence, or signal note within the live run. Supports `daily_report_date`, `related_signal_ids`, `related_evidence_ids`, `related_candidate_ids`, `related_source_ids`, `risk_domains` for bidirectional links.
+- `risk_live_run_finalize` — End the live research run with a summary. Accepts `final_report_markdown` and `daily_report_date` to write the daily note immediately.
+- `risk_live_daily_report_upsert` — Write or update the final daily report note in `00_Daily/YYYY-MM-DD.md`. Use when the final report is ready and you want it visible in Obsidian immediately.
 
 **When to use:**
 
@@ -177,7 +178,8 @@ During a daily report or interactive run, you may use live Obsidian vault tools 
 - When evidence is extracted, append `evidence_extracted` and upsert an evidence note.
 - When a signal is promoted/stored, append `signal_promoted`/`signal_stored` and upsert a signal note.
 - When digest is stored, append `digest_stored`.
-- At end, call `risk_live_run_finalize`.
+- When the final report is ready, call `risk_live_daily_report_upsert` to write it to Obsidian immediately.
+- At end, call `risk_live_run_finalize` with `final_report_markdown` and `daily_report_date`.
 
 **Important:**
 
@@ -186,6 +188,7 @@ During a daily report or interactive run, you may use live Obsidian vault tools 
 - You must still call: seen-check, raw item store, evidence store, signal store, digest store.
 - **Do NOT write private chain-of-thought or hidden reasoning into Obsidian.** Live notes should contain observable research state only: source checked, candidate found, evidence excerpt, judgment summary, uncertainty, next step.
 - All live vault writes are constrained to `OBSIDIAN_VAULT_PATH` — no arbitrary file writes.
+- **Live immediate write vs export backfill**: `risk_live_daily_report_upsert` writes the daily note in real time during the run. `make obsidian-export` is for backfill, repair, and full consolidation — not for normal daily UX. You do NOT need to tell the user to run `make obsidian-export` to see the final report.
 
 ## Modes
 
@@ -276,12 +279,17 @@ Rules for subagent delegation:
 - Subagent signal stores may fail with schema errors — re-store from the main agent if needed.
 - Apply your own severity/confidence judgment; do not blindly accept subagent assessments.
 - Verify subagent-found URLs before citing them in the digest.
+- Subagents may hit `max_iterations` exit before completing all goals — check their summary for completeness and follow up on any gaps yourself.
+- When a source is known to be blocked (e.g., OpenAI + Cloudflare), tell the subagent upfront so it can pivot to search engines immediately rather than wasting iterations on failed navigations.
+- Subagents using search engines: Yahoo Search works reliably without CAPTCHAs; Google and DuckDuckGo may trigger CAPTCHAs.
 
 ### Backend tool quirks
 
-- `risk_signal_store` may fail multiple times before succeeding (schema validation retries). If it fails, retry with the same or slightly simplified payload. Common failure: passing empty arrays for `source_ids`/`raw_item_ids`.
+- `risk_signal_store` requires a `summary` field (string). Omitting it causes a validation error. The schema also requires `what_changed`, `why_it_matters`, `what_to_watch_next`, `title`, `risk_domains`, `signal_type`, `signal_date`, `severity`, `confidence`, and `evidence_url`. If it fails, retry with the same or slightly simplified payload. Common failures: (1) missing `summary`; (2) passing empty arrays for `source_ids`/`raw_item_ids`.
 - `risk_benchmark_observation_store` is not yet implemented — do not rely on it.
 - `risk_raw_item_store` deduplicates by canonical_url. Same article from a different source_id returns `is_duplicate: true` — do not re-store.
+- `risk_source_run_record` may report `items_new: 0` even when items were stored — do not rely on it for counting; track new items separately.
+- `risk_discovery_helper_preview` for AXRP returns navigation links (homepage, RSS, Patreon, etc.) instead of episode listings. The helper is not useful for AXRP episode discovery — browse manually or use the RSS feed URL (`https://axrp.net/feed.xml`).
 
 ### Source reliability
 

@@ -183,3 +183,81 @@ Prompts now explicitly mention:
 - List allowed `event_type` values
 - List allowed `note_type` values
 - If live logging disabled, continue normally
+
+## Live Vault UX Contract (R1-13C)
+
+R1-13C closes the gap between live research and the final daily report, making Obsidian the primary human-facing interface for the entire research lifecycle.
+
+### Immediate Daily Report Note Writing
+
+When live vault is enabled, the final daily report appears in `00_Daily/YYYY-MM-DD.md` **immediately** when the run completes. Users no longer need to run `make obsidian-export` to see their daily report in Obsidian.
+
+- `risk_live_run_finalize` now accepts optional `final_report_markdown` and `daily_report_date` fields. When provided, the finalizer writes (or updates) the daily note in `00_Daily/` before closing the run.
+- `risk_live_daily_report_upsert` is a new dedicated MCP tool for explicitly writing or updating the daily report note at any point during or after a run. This decouples daily note writing from run finalization.
+- Valuable intermediate research results are written as notes during the run, not only at the end.
+
+### Bidirectional Links
+
+All note types are connected via bidirectional wikilinks:
+
+- Daily note links to its live run, and the live run links back to the daily note
+- Signal notes link to their evidence, and evidence notes link back to their signals
+- Candidate notes link to their source, and source notes link to candidates found from them
+- `risk_live_note_upsert` now supports bidirectional link fields (`linked_signal_ids`, `linked_evidence_ids`, `linked_candidate_ids`, `linked_source_id`) that are rendered as wikilinks in both directions
+
+Link resolution is handled by `obsidian/links.py`, which maintains a link index and ensures backlinks are written when forward links are created.
+
+### Review Queue Live Integration
+
+The review queue (`90_Review_Queue/`) is updated live during research runs:
+
+- **Signals without evidence** are added to `needs-review.md` as soon as they are stored
+- **Failed source checks** are added to `failed-sources.md` immediately
+- **Evidence items needing review** (`needs_human_review=true`) appear in `needs-review.md` as they are extracted
+
+This means the review queue is always current — no post-run export is required to surface items needing human attention.
+
+### Digest Mirror to Obsidian
+
+When `OBSIDIAN_LIVE_LOGGING_ENABLED=true`, `risk_digest_store` automatically mirrors the digest content to the daily note in `00_Daily/YYYY-MM-DD.md`. This ensures the Chinese-language intelligence summary is visible in Obsidian as soon as it is stored.
+
+### Runner Safety Net
+
+If a live run is interrupted (Hermes crash, timeout, network failure), the runner safety net ensures partial state is preserved:
+
+- All notes written before the interruption remain in the vault
+- The daily note reflects whatever content was written up to the interruption point
+- A subsequent `risk_live_run_finalize` call (even from a new session) can complete the run and update the daily note
+- The `run_id` is filesystem-based, so it survives process restarts
+
+### UX Contract
+
+**For normal live UX, `make obsidian-export` is no longer needed.** The daily report, signals, evidence, candidates, and review queue all appear in Obsidian during the live run.
+
+`make obsidian-export` is reserved for:
+- **Backfill** — populating the vault for dates before live logging was enabled
+- **Repair** — regenerating notes that may be corrupted or out of sync
+- **Full consolidation** — reconciling vault state with DB state after manual edits or schema changes
+
+### New MCP Tool
+
+| Tool | Purpose |
+|------|---------|
+| `risk_live_daily_report_upsert` | Write or update the daily report note in `00_Daily/` during or after a live run |
+
+This brings the total MCP tool count to 23.
+
+### Updated MCP Tools
+
+| Tool | Change |
+|------|--------|
+| `risk_live_run_finalize` | Now accepts optional `final_report_markdown` and `daily_report_date` for immediate daily note write |
+| `risk_live_note_upsert` | Now supports bidirectional link fields (`linked_signal_ids`, `linked_evidence_ids`, `linked_candidate_ids`, `linked_source_id`) |
+| `risk_digest_store` | When live vault enabled, mirrors digest to Obsidian daily note |
+
+### New Modules
+
+| Module | Purpose |
+|--------|---------|
+| `obsidian/daily_note.py` | Daily report note creation, update, and frontmatter management for `00_Daily/` |
+| `obsidian/links.py` | Bidirectional link resolution, backlink writing, and link index maintenance |

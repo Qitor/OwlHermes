@@ -63,7 +63,7 @@ Run a specific test: `.venv/bin/python -m pytest tests/test_api.py::test_health`
 
 **Hermes owns judgment/orchestration; the backend owns deterministic state and tools.**
 
-Data flow: Source Registry (YAML) → Hermes-Agent (external, daily workflow) → Backend API (store/retrieve/dedup) → MCP Server (22 tool functions for Hermes)
+Data flow: Source Registry (YAML) → Hermes-Agent (external, daily workflow) → Backend API (store/retrieve/dedup) → MCP Server (23 tool functions for Hermes)
 
 ### Key layers
 
@@ -71,12 +71,12 @@ Data flow: Source Registry (YAML) → Hermes-Agent (external, daily workflow) �
 - **`registry/`** — Loads 5 YAML files from `source_registry/` with Pydantic validators: sources (22), podcasts (6), events (6), benchmarks (9), risk_keywords
 - **`services/dedup.py` + `services/ingestion.py`** — Dedup pipeline: canonicalize URL → SHA-256 content hash → normalize title → build dedup key (canonical URL > content hash > source_id + normalized title). On match: increment seen_count, update last_seen_at
 - **`db/`** — SQLAlchemy 2.0 (mapped_column style) models for 12 tables, session factory, schema init via raw SQL
-- **`mcp/`** — FastMCP server exposing 22 tool functions that Hermes calls via MCP protocol
+- **`mcp/`** — FastMCP server exposing 23 tool functions that Hermes calls via MCP protocol
 - **`collectors/`** — Placeholder only (return empty lists). Real collection deferred to Hermes-Agent
 - **`helpers/`** — R1-09 deterministic discovery helpers (scrapling_official_page, rss, podcast, arxiv). Return CandidateItems, do NOT store or judge
 - **`quality/`** — R1-11 report quality checker (deterministic, no LLMs). Reads `quality/daily_report_checklist.yaml`, runs section-detection and anti-pattern checks, produces 0-100 score
 - **`models/`** — R1-11B model-tiering: `SmallModelClient` for optional small/fast model (advisory only), `SmallModelConfig` from env vars, `candidate_preprocess` service
-- **`obsidian/`** — R1-12 Obsidian Intelligence Vault: `markdown.py` (safe utilities, frontmatter, wikilinks, atomic write, generated-block markers), `exporter.py` (full vault export), `cli.py` (Obsidian/Finder open helpers), `live_writer.py` (R1-13 live vault writer)
+- **`obsidian/`** — R1-12 Obsidian Intelligence Vault: `markdown.py` (safe utilities, frontmatter, wikilinks, atomic write, generated-block markers), `exporter.py` (full vault export), `cli.py` (Obsidian/Finder open helpers), `live_writer.py` (R1-13 live vault writer), `daily_note.py` (R1-13C daily report note writing), `links.py` (R1-13C bidirectional link resolution)
 - **`services/evidence.py`** — R1-12 evidence/claim persistence: store, search, list, serialize
 - **`services/live_research.py`** — R1-13 live research event persistence: store, search, serialize
 - **`workers/`** — Placeholder daily_run returning not_implemented
@@ -91,14 +91,14 @@ Tests use in-memory SQLite (`StaticPool`) as PostgreSQL stand-in. FastAPI `TestC
 
 ## Implementation Status
 
-R1-01 through R1-09B are done. R1-10 (stable daily report run modes) is done. R1-11 (daily report quality loop) is done. R1-11B (model-tiered daily report pipeline) is done. R1-11C (two-phase daily report finalization) is done. R1-12 (signal evidence persistence + Obsidian Intelligence Vault) is done — evidence store/search MCP tools, Obsidian vault export with generated-block safety. R1-12B (real E2E vault population validation) is done — evidence placeholders, candidate/run notes, daily linking, inspect script, E2E target. R1-13 (live Obsidian research logging) is done — live vault writer, research event persistence, 4 live MCP tools, live run scripts and inspection. R1-13B (live vault E2E validation & UX hardening) is done — stateless writer fix, COT violation detection, schema hardening (Literal types, descriptions), export linking to live runs, Live Run Index, E2E target with requirements, prompt hardening with run_id guidance. R1-13+ (website, production delivery) are TODO.
+R1-01 through R1-09B are done. R1-10 (stable daily report run modes) is done. R1-11 (daily report quality loop) is done. R1-11B (model-tiered daily report pipeline) is done. R1-11C (two-phase daily report finalization) is done. R1-12 (signal evidence persistence + Obsidian Intelligence Vault) is done — evidence store/search MCP tools, Obsidian vault export with generated-block safety. R1-12B (real E2E vault population validation) is done — evidence placeholders, candidate/run notes, daily linking, inspect script, E2E target. R1-13 (live Obsidian research logging) is done — live vault writer, research event persistence, 4 live MCP tools, live run scripts and inspection. R1-13B (live vault E2E validation & UX hardening) is done — stateless writer fix, COT violation detection, schema hardening (Literal types, descriptions), export linking to live runs, Live Run Index, E2E target with requirements, prompt hardening with run_id guidance. R1-13C (live vault UX contract — immediate daily report notes, bidirectional links, review queue live integration, `risk_live_daily_report_upsert`, extended `risk_live_run_finalize`, digest mirror, runner safety net) is done. R1-13+ (website, production delivery) are TODO.
 
 ### Hermes Integration
 
 Hermes-Agent is external (not vendored). Integration via `~/.hermes/config.yaml`:
 - MCP server `ai_risk_observer`: stdio command launching `.venv/bin/python -m frontier_ai_risk_observer.mcp.server`
 - Skills external dir: `skills/` directory
-- 22 `risk_*` tools allowlisted, prompts/resources disabled
+- 23 `risk_*` tools allowlisted, prompts/resources disabled
 - `hermes mcp add` CLI has `-m` flag parsing issues; use YAML editing instead (`make hermes-smoke-apply`)
 - MCP SDK is an optional dependency: `pip install -e ".[mcp]"`
 

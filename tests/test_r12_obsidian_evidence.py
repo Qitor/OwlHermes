@@ -934,9 +934,9 @@ class TestMCPServerRegistration:
         tool_names = [f.__name__ for f in MCP_TOOL_FUNCTIONS]
         assert "risk_evidence_store" in tool_names
         assert "risk_evidence_search" in tool_names
-        assert len(MCP_TOOL_FUNCTIONS) == 22
+        assert len(MCP_TOOL_FUNCTIONS) == 23
 
     def test_mcp_tool_count(self):
         from frontier_ai_risk_observer.mcp.server import MCP_TOOL_FUNCTIONS
 
-        assert len(MCP_TOOL_FUNCTIONS) == 22
+        assert len(MCP_TOOL_FUNCTIONS) == 23

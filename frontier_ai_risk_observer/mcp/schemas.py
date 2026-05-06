@@ -195,6 +195,10 @@ class LiveEventAppendInput(BaseModel):
     raw_item_id: str | None = None
     signal_id: str | None = None
     evidence_id: str | None = None
+    note_vault_path: str | None = Field(
+        default=None,
+        description="Vault-relative path to the created note for timeline wikilinks.",
+    )
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -211,6 +215,19 @@ class LiveNoteUpsertInput(BaseModel):
         description="Observable research state only. No chain-of-thought."
     )
     source_id: str | None = None
+    daily_report_date: str | None = Field(
+        default=None,
+        description="YYYY-MM-DD of the daily report for bidirectional linking.",
+    )
+    related_signal_ids: list[str] = Field(default_factory=list)
+    related_evidence_ids: list[str] = Field(default_factory=list)
+    related_candidate_ids: list[str] = Field(default_factory=list)
+    related_source_ids: list[str] = Field(default_factory=list)
+    risk_domains: list[str] = Field(default_factory=list)
+    confidence: int | None = Field(default=None, ge=1, le=5)
+    severity: int | None = Field(default=None, ge=1, le=5)
+    needs_review: bool = False
+    needs_review_reason: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -219,3 +236,36 @@ class LiveRunFinalizeInput(BaseModel):
 
     run_id: str
     summary: dict[str, Any] = Field(default_factory=dict)
+    final_report_markdown: str | None = Field(
+        default=None,
+        description="Full final report markdown for immediate daily note write.",
+    )
+    digest_id: str | None = None
+    daily_report_date: str | None = Field(
+        default=None,
+        description="YYYY-MM-DD of the daily report for bidirectional linking.",
+    )
+    quality_score: int | None = Field(default=None, ge=0)
+    signal_note_paths: list[str] = Field(default_factory=list)
+    candidate_note_paths: list[str] = Field(default_factory=list)
+    evidence_note_paths: list[str] = Field(default_factory=list)
+    source_note_paths: list[str] = Field(default_factory=list)
+    failure_note_paths: list[str] = Field(default_factory=list)
+
+
+class LiveDailyReportUpsertInput(BaseModel):
+    """Input for writing/updating the final daily report note in Obsidian."""
+
+    report_date: str = Field(description="YYYY-MM-DD")
+    title: str = ""
+    report_markdown: str = Field(description="Full final report markdown body")
+    digest_id: str | None = None
+    run_id: str | None = None
+    status: str = "draft"
+    summary: dict[str, Any] = Field(default_factory=dict)
+    signal_note_paths: list[str] = Field(default_factory=list)
+    candidate_note_paths: list[str] = Field(default_factory=list)
+    evidence_note_paths: list[str] = Field(default_factory=list)
+    source_note_paths: list[str] = Field(default_factory=list)
+    failure_note_paths: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
