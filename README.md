@@ -431,6 +431,56 @@ make daily-report-debug          # Show latest run artifacts
 
 See `docs/22_two_phase_daily_report_finalization.md` for full details.
 
+## R1-12 Signal Evidence Persistence + Obsidian Intelligence Vault
+
+R1-12 adds evidence/claim persistence and Obsidian vault export for human review and note-taking.
+
+**Evidence persistence:**
+
+Two new MCP tools allow Hermes to store and search claim-level evidence linked to signals or raw items:
+
+- `risk_evidence_store` — store evidence with claim_text, evidence_url, evidence_excerpt, confidence, supports_signal
+- `risk_evidence_search` — search evidence by signal_id, raw_item_id, source_id, claim_type
+
+The existing `SourceClaim` model is extended with `signal_id`, `source_id`, `evidence_excerpt`, `evidence_title`, `supports_signal` fields.
+
+**Obsidian Intelligence Vault:**
+
+After a daily report, export DB state to a structured Obsidian vault with daily notes, signal notes, candidate notes, evidence notes, source notes, risk domain notes, entity notes, run notes, review queue, and index notes.
+
+```bash
+make obsidian-export            # Export DB state to Obsidian vault
+make obsidian-export-dry-run    # Preview what would be exported
+make obsidian-open-latest       # Export and open vault directory
+make daily-report-and-obsidian  # Run daily report then export
+```
+
+Generated content is wrapped in `<!-- BEGIN_AUTO_GENERATED -->...<!-- END_AUTO_GENERATED -->` markers, preserving human content outside these blocks on re-export.
+
+See `docs/23_obsidian_intelligence_vault.md` for full details.
+
+## R1-13 Live Obsidian Research Logging
+
+R1-13 adds live Obsidian vault writing during Hermes research runs, making the vault a real-time research workspace instead of only post-run export.
+
+**Four new MCP tools:**
+
+- `risk_live_run_start` — start a live research run, creating `08_Live_Runs/{run_id}/` with subdirectories
+- `risk_live_event_append` — append research events (source selected, candidate found, evidence extracted, signal stored, etc.)
+- `risk_live_note_upsert` — write or update source/candidate/evidence/signal notes in real time
+- `risk_live_run_finalize` — end the run with a summary
+
+**R1-13B enhancements:** stateless writer fix (MCP calls are stateless), COT violation detection, schema hardening (Literal types, field descriptions), export linking to live runs, Live Run Index, E2E validation target with requirements.
+
+```bash
+make daily-report-live-vault       # Run daily report with live vault logging
+make daily-report-live-vault-e2e   # Full E2E with requirements validation
+make live-vault-inspect            # Inspect live vault structure and content
+make obsidian-open-live-run        # Open latest live run in Obsidian/Finder
+```
+
+Live logging is **disabled by default** — set `OBSIDIAN_LIVE_LOGGING_ENABLED=true` and `OBSIDIAN_VAULT_PATH` to enable. See `docs/24_live_obsidian_research_logging.md` for details.
+
 ## 第一阶段成功标准
 
 第一阶段不要追求漂亮网站。成功标准是：

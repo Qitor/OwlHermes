@@ -31,6 +31,12 @@ mcp_servers:
         - risk_source_health_summary
         - risk_discovery_helper_preview
         - risk_candidate_preprocess
+        - risk_evidence_store
+        - risk_evidence_search
+        - risk_live_run_start
+        - risk_live_event_append
+        - risk_live_note_upsert
+        - risk_live_run_finalize
       prompts: false
       resources: false
     env:

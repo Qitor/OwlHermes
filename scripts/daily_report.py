@@ -106,6 +106,8 @@ class RunSummary:
     next_suggested_command: str = ""
     small_model_enabled: bool = False
     small_model_name: str = ""
+    live_vault_enabled: bool = False
+    live_run_dir: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -846,6 +848,10 @@ def main() -> None:
         "--quality-check", action="store_true",
         help="Run quality check after report generation",
     )
+    parser.add_argument(
+        "--live-vault", action="store_true",
+        help="Enable live Obsidian vault logging (requires OBSIDIAN_VAULT_PATH)",
+    )
     args = parser.parse_args()
 
     if not any([args.preflight, args.run, args.inspect]):
@@ -856,6 +862,15 @@ def main() -> None:
         sys.exit(0 if preflight() else 1)
 
     if args.run:
+        # Enable live vault logging if requested
+        if args.live_vault:
+            vault_path = os.environ.get("OBSIDIAN_VAULT_PATH", "")
+            if not vault_path:
+                print("ERROR: --live-vault requires OBSIDIAN_VAULT_PATH to be set")
+                sys.exit(1)
+            os.environ["OBSIDIAN_LIVE_LOGGING_ENABLED"] = "true"
+            print(f"  Live vault logging enabled: {vault_path}")
+
         if not preflight():
             print("\nPreflight FAILED. Cannot run.")
             sys.exit(1)
@@ -876,6 +891,16 @@ def main() -> None:
             finalize_prompt_file=finalize_file,
             quality_check=args.quality_check,
         )
+
+        # Set live vault fields in summary
+        if args.live_vault:
+            summary.live_vault_enabled = True
+            vault_path = os.environ.get("OBSIDIAN_VAULT_PATH", "")
+            if vault_path:
+                from frontier_ai_risk_observer.obsidian.cli import get_latest_live_run_dir
+                latest = get_latest_live_run_dir(Path(vault_path))
+                if latest:
+                    summary.live_run_dir = str(latest)
         _write_summary(run_dir, summary)
 
         print("\n=== Post-Run Inspection ===")

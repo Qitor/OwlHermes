@@ -186,7 +186,7 @@ class EventCluster(Base):
 
 
 class SourceClaim(Base):
-    """Claim-level extraction produced by Hermes for long-form sources."""
+    """Claim-level extraction / evidence item produced by Hermes."""
 
     __tablename__ = "source_claims"
     __table_args__ = (CheckConstraint("confidence BETWEEN 1 AND 5"),)
@@ -194,9 +194,13 @@ class SourceClaim(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID_TYPE, primary_key=True, default=uuid.uuid4
     )
-    raw_item_id: Mapped[uuid.UUID] = mapped_column(
-        UUID_TYPE, ForeignKey("raw_items.id", ondelete="CASCADE"), nullable=False
+    raw_item_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID_TYPE, ForeignKey("raw_items.id", ondelete="CASCADE"), nullable=True
     )
+    signal_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID_TYPE, ForeignKey("signals.id"), nullable=True
+    )
+    source_id: Mapped[str | None] = mapped_column(Text)
     event_cluster_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID_TYPE, ForeignKey("event_clusters.id")
     )
@@ -209,11 +213,18 @@ class SourceClaim(Base):
     entities: Mapped[list[Any]] = mapped_column(
         JSON_TYPE, nullable=False, server_default=JSON_EMPTY_ARRAY
     )
-    evidence_level: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_level: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'secondary'")
+    )
     evidence_quote: Mapped[str | None] = mapped_column(Text)
+    evidence_excerpt: Mapped[str | None] = mapped_column(Text)
+    evidence_title: Mapped[str | None] = mapped_column(Text)
     evidence_timestamp: Mapped[str | None] = mapped_column(Text)
     primary_source_url: Mapped[str | None] = mapped_column(Text)
     confidence: Mapped[int | None] = mapped_column(Integer)
+    supports_signal: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True
+    )
     should_promote_to_signal: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
@@ -414,6 +425,32 @@ class AuditLog(Base):
     target_id: Mapped[str | None] = mapped_column(Text)
     payload: Mapped[dict[str, Any]] = mapped_column(
         JSON_TYPE, nullable=False, server_default=JSON_EMPTY_OBJECT
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=NOW
+    )
+
+
+class ResearchEvent(Base):
+    """Live research event logged during a Hermes daily report run."""
+
+    __tablename__ = "research_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID_TYPE, primary_key=True, default=uuid.uuid4
+    )
+    run_id: Mapped[str] = mapped_column(Text, nullable=False)
+    event_type: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("''")
+    )
+    body: Mapped[str | None] = mapped_column(Text)
+    source_id: Mapped[str | None] = mapped_column(Text)
+    raw_item_id: Mapped[uuid.UUID | None] = mapped_column(UUID_TYPE)
+    signal_id: Mapped[uuid.UUID | None] = mapped_column(UUID_TYPE)
+    evidence_id: Mapped[uuid.UUID | None] = mapped_column(UUID_TYPE)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON_TYPE, nullable=False, server_default=JSON_EMPTY_OBJECT
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=NOW

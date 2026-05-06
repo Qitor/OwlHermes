@@ -1,3 +1,9 @@
+---
+name: ai-risk-signal-observer
+description: Run the Hermes-led daily frontier AI risk intelligence workflow — identify signals, triage, produce Chinese risk digest.
+tags: [risk, ai-safety, daily-report, frontier-ai]
+---
+
 # AI Risk Signal Observer
 
 Use this skill to run the Hermes-led daily frontier AI risk intelligence workflow.
@@ -28,7 +34,8 @@ Every signal must answer:
    - extract claim-level evidence for podcast/interview/event material;
    - produce a signal only if it changes risk judgment.
 6. Store a signal through `risk_signal_store` only after Hermes has judged the item to change risk understanding. Use `risk_signal_search` for historical signal lookup. Store benchmark/framework observations through `risk_benchmark_observation_store` when that backend service is available.
-7. Generate a concise Chinese digest with sections:
+7. Store evidence/claim items through `risk_evidence_store`. Use `risk_evidence_search` to look up existing evidence linked to a signal or raw item. Evidence items capture claim-level detail (claim_text, evidence_url, evidence_excerpt, confidence, supports_signal) that supports or weakens a signal.
+8. Generate a concise Chinese digest with sections:
    - 今日一句话总览；
    - Top Signals；
    - 政策/治理；
@@ -41,9 +48,9 @@ Every signal must answer:
    - arXiv/研究趋势；
    - 需进一步深挖；
    - 来源健康状态。
-8. Store the digest through `risk_digest_store`; use `risk_digest_search` for prior digest lookup.
-9. Send via configured Hermes gateway.
-10. Record source runs through `risk_source_run_record`. Delivery integration is handled by configured Hermes gateway/runtime later.
+9. Store the digest through `risk_digest_store`; use `risk_digest_search` for prior digest lookup.
+10. Send via configured Hermes gateway.
+11. Record source runs through `risk_source_run_record`. Delivery integration is handled by configured Hermes gateway/runtime later.
 
 ## Helper-Assisted Discovery (R1-09)
 
@@ -135,6 +142,51 @@ A conference being announced is usually not a signal. Upgrade only if there is:
 
 Prefer primary sources. Always keep source URL. Mark `needs_human_review` for high-impact low-confidence claims.
 
+**Rule: For each Top Signal, you MUST store at least one evidence item via `risk_evidence_store`.** Intermediate evidence objects are part of the product — do not only store the final digest.
+
+Use `risk_evidence_store` to persist claim-level evidence linked to a signal or raw item. Use `risk_evidence_search` to look up existing evidence. Each evidence item should include:
+- `claim_text`: what was claimed or observed
+- `evidence_url`: primary source URL
+- `evidence_excerpt`: relevant excerpt from the source
+- `confidence`: 1-5 confidence level
+- `supports_signal`: whether this evidence supports or weakens the linked signal
+- `risk_domains`: relevant risk domains
+
+If evidence excerpt is unavailable, set `needs_human_review: true` and include a `needs_review_reason`.
+
+When using `risk_signal_store`, include the three-question fields: `what_changed`, `why_it_matters`, `what_to_watch_next`.
+
+## Live Vault Logging (R1-13)
+
+During a daily report or interactive run, you may use live Obsidian vault tools to record research progress in real time. Live logging is **optional and disabled by default**.
+
+**Live vault tools:**
+
+- `risk_live_run_start` — Start a live research run. Creates a run directory in the Obsidian vault.
+- `risk_live_event_append` — Append a research event (source selected, candidate found, evidence extracted, signal stored, etc.).
+- `risk_live_note_upsert` — Write or update a source, candidate, evidence, or signal note within the live run.
+- `risk_live_run_finalize` — End the live research run with a summary.
+
+**When to use:**
+
+- At the start of daily-report or interactive mode, call `risk_live_run_start` if available.
+- When selecting a source, append `source_selected`.
+- When starting/completing a source check, append `source_check_started`/`source_check_completed`.
+- When source fails, append `source_failed` and/or upsert a `failure` note.
+- When a candidate is found/stored, append `candidate_found`/`candidate_stored` and upsert a candidate note.
+- When evidence is extracted, append `evidence_extracted` and upsert an evidence note.
+- When a signal is promoted/stored, append `signal_promoted`/`signal_stored` and upsert a signal note.
+- When digest is stored, append `digest_stored`.
+- At end, call `risk_live_run_finalize`.
+
+**Important:**
+
+- If `risk_live_run_start` returns `live_logging_enabled: false`, **continue normally without live logging**.
+- Live vault writing is **observational/persistence only** — it must not replace DB tools.
+- You must still call: seen-check, raw item store, evidence store, signal store, digest store.
+- **Do NOT write private chain-of-thought or hidden reasoning into Obsidian.** Live notes should contain observable research state only: source checked, candidate found, evidence excerpt, judgment summary, uncertainty, next step.
+- All live vault writes are constrained to `OBSIDIAN_VAULT_PATH` — no arbitrary file writes.
+
 ## Modes
 
 ### Smoke-test mode
@@ -201,6 +253,42 @@ Same as local daily-report mode, plus:
 - Show progress and tool-call intentions as you work.
 - Let the human observer follow your reasoning.
 - Keep the run bounded but visible.
+- **Expose editorial judgment, not just tool calls.** For each source and candidate, explain:
+  - Why you chose this source over another
+  - Why a candidate was judged as signal or non-signal
+  - Where evidence is weak and how confident you are
+  - Which items are included vs excluded
+- **Override subagent severity assessments.** Subagents may assign severity 5; apply your own editorial calibration and explain the adjustment.
+- **Examples of exposed judgment:**
+  - "选择 anthropic_news 而非 google_deepmind_blog，因为 Anthropic 本周有 RSP 更新传闻"
+  - "这条 TechCrunch 报道看起来是产品公告，缺乏风险维度，不升级为信号"
+  - "子代理初始评估为 severity 5，我降至 4：框架识别了评估缺口但不代表能力跳升"
+
+## Operational Patterns
+
+### Subagent deep-read pattern
+
+When scanning multiple sources, use `delegate_task` with browser toolset to deep-read long articles in parallel while you continue scanning other sources. This significantly reduces wall-clock time.
+
+Rules for subagent delegation:
+- Provide clear extraction goals (what to extract, in what language).
+- Always include the source_id for seen-check and raw_item storage.
+- Subagent signal stores may fail with schema errors — re-store from the main agent if needed.
+- Apply your own severity/confidence judgment; do not blindly accept subagent assessments.
+- Verify subagent-found URLs before citing them in the digest.
+
+### Backend tool quirks
+
+- `risk_signal_store` may fail multiple times before succeeding (schema validation retries). If it fails, retry with the same or slightly simplified payload. Common failure: passing empty arrays for `source_ids`/`raw_item_ids`.
+- `risk_benchmark_observation_store` is not yet implemented — do not rely on it.
+- `risk_raw_item_store` deduplicates by canonical_url. Same article from a different source_id returns `is_duplicate: true` — do not re-store.
+
+### Source reliability
+
+See `references/source-reliability.md` for consolidated source reliability notes from R1-08 through R1-05. Key points:
+- **Most reliable**: TechCrunch RSS, AISI blog, Anthropic news
+- **Frequently failing**: OpenAI (Cloudflare), arXiv API (rate-limit/policy), SAIF/IDAIS (timeout)
+- **Low frequency**: Apollo blog, AXRP — check weekly, not daily
 
 ### Normal/production mode (future)
 

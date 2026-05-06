@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, HttpUrl
 
@@ -120,6 +120,36 @@ McpRawItemCreate = RawItemCreate
 McpSourceRunCreate = SourceRunCreate
 
 
+class EvidenceStoreInput(BaseModel):
+    """Input for storing an evidence/claim item."""
+
+    raw_item_id: str | None = None
+    signal_id: str | None = None
+    source_id: str | None = None
+    claim_text: str = ""
+    claim_type: str = "hermes_extraction"
+    evidence_url: str | None = None
+    evidence_title: str | None = None
+    evidence_excerpt: str | None = None
+    evidence_level: str = "secondary"
+    confidence: int | None = Field(default=None, ge=1, le=5)
+    supports_signal: bool | None = None
+    risk_domains: list[str] = Field(default_factory=list)
+    entities: list[str] = Field(default_factory=list)
+    needs_human_review: bool = False
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class EvidenceSearchInput(BaseModel):
+    """Input for searching evidence items."""
+
+    signal_id: str | None = None
+    raw_item_id: str | None = None
+    source_id: str | None = None
+    claim_type: str | None = None
+    limit: int = Field(default=50, ge=1, le=500)
+
+
 class CandidatePreprocessInput(BaseModel):
     """Input for advisory candidate pre-processing."""
 
@@ -129,3 +159,63 @@ class CandidatePreprocessInput(BaseModel):
     source_id: str = ""
     focus: str = ""
     risk_domain: str = ""
+
+
+# ---------------------------------------------------------------------------
+# R1-13: Live Obsidian Research Logging
+# ---------------------------------------------------------------------------
+
+
+class LiveRunStartInput(BaseModel):
+    """Input for starting a live research run."""
+
+    run_id: str | None = None
+    title: str = ""
+
+
+class LiveEventAppendInput(BaseModel):
+    """Input for appending an event to a live research run."""
+
+    run_id: str
+    event_type: str = Field(
+        description=(
+            "Event type. Allowed: run_started, source_selected, "
+            "source_check_started, source_check_completed, source_failed, "
+            "candidate_found, candidate_seen_check, candidate_stored, "
+            "evidence_extracted, signal_promoted, signal_stored, "
+            "digest_stored, run_finalized, note, warning"
+        )
+    )
+    title: str = ""
+    body: str | None = Field(
+        default=None,
+        description="Observable research state only. No chain-of-thought.",
+    )
+    source_id: str | None = None
+    raw_item_id: str | None = None
+    signal_id: str | None = None
+    evidence_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class LiveNoteUpsertInput(BaseModel):
+    """Input for upserting a live note in the research vault."""
+
+    run_id: str
+    note_type: Literal["source", "candidate", "evidence", "signal", "failure"]
+    slug: str = Field(
+        description="Filename slug for the note. No path separators or ../ allowed."
+    )
+    title: str
+    body: str = Field(
+        description="Observable research state only. No chain-of-thought."
+    )
+    source_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class LiveRunFinalizeInput(BaseModel):
+    """Input for finalizing a live research run."""
+
+    run_id: str
+    summary: dict[str, Any] = Field(default_factory=dict)

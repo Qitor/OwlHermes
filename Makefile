@@ -1,4 +1,4 @@
-.PHONY: install test lint typecheck run-api db-init db-init-dryrun db-check db-reset-dryrun validate-registries mcp-smoke hermes-smoke hermes-smoke-apply r108-dry-run-preflight r108-run-hermes r108-inspect-state source-health preview-helpers r109-helper-preflight r109b-dry-run-preflight r109b-run-hermes r109b-inspect-state daily-report-preflight daily-report daily-report-inspect hermes-interactive-preflight hermes-interactive-daily hermes-interactive-copy-prompt report-quality-check report-quality-review daily-report-with-quality model-tier-smoke model-tier-smoke-live daily-report-finalize daily-report-debug
+.PHONY: install test lint typecheck run-api db-init db-init-dryrun db-check db-reset-dryrun validate-registries mcp-smoke hermes-smoke hermes-smoke-apply r108-dry-run-preflight r108-run-hermes r108-inspect-state source-health preview-helpers r109-helper-preflight r109b-dry-run-preflight r109b-run-hermes r109b-inspect-state daily-report-preflight daily-report daily-report-inspect hermes-interactive-preflight hermes-interactive-daily hermes-interactive-copy-prompt report-quality-check report-quality-review daily-report-with-quality model-tier-smoke model-tier-smoke-live daily-report-finalize daily-report-debug obsidian-export obsidian-export-dry-run obsidian-open-latest daily-report-and-obsidian obsidian-inspect daily-report-and-obsidian-e2e daily-report-live-vault daily-report-live-vault-e2e live-vault-inspect obsidian-open-live-run
 
 PYTHON := .venv/bin/python
 RUFF := .venv/bin/ruff
@@ -182,3 +182,70 @@ model-tier-smoke-live:
 	result = preprocess_candidate(title='Live smoke test', content_text='AI safety regulation update', config=config); \
 	assert result.advisory_only is True; \
 	print(f'OK: small model={result.model_used}, advisory_only={result.advisory_only}')"
+
+obsidian-export:
+	DATABASE_URL="$(DRYRUN_DB_URL)" $(PYTHON) scripts/obsidian_export.py --latest
+
+obsidian-export-dry-run:
+	DATABASE_URL="$(DRYRUN_DB_URL)" $(PYTHON) scripts/obsidian_export.py --latest --dry-run
+
+obsidian-open-latest:
+	DATABASE_URL="$(DRYRUN_DB_URL)" $(PYTHON) scripts/obsidian_export.py --latest --open
+
+daily-report-and-obsidian:
+	$(MAKE) daily-report
+	$(MAKE) obsidian-export
+
+obsidian-inspect:
+	$(PYTHON) scripts/inspect_obsidian_export.py --vault $${OBSIDIAN_VAULT_PATH:-.local/obsidian_vault}
+
+daily-report-and-obsidian-e2e:
+	@if [ -z "$$OBSIDIAN_VAULT_PATH" ]; then \
+		echo "ERROR: OBSIDIAN_VAULT_PATH is not set."; \
+		echo "Set it before running, e.g.:"; \
+		echo "  OBSIDIAN_VAULT_PATH=.local/obsidian_e2e_vault make daily-report-and-obsidian-e2e"; \
+		exit 1; \
+	fi
+	$(MAKE) daily-report
+	$(MAKE) report-quality-check
+	$(MAKE) obsidian-export
+	$(MAKE) obsidian-inspect
+
+daily-report-live-vault:
+	@if [ -z "$$OBSIDIAN_VAULT_PATH" ]; then \
+		echo "ERROR: OBSIDIAN_VAULT_PATH is not set."; \
+		echo "Set it before running, e.g.:"; \
+		echo "  OBSIDIAN_VAULT_PATH=~/Documents/airo make daily-report-live-vault"; \
+		exit 1; \
+	fi
+	DATABASE_URL="$(DRYRUN_DB_URL)" $(PYTHON) scripts/daily_report.py --run --live-vault
+	$(MAKE) report-quality-check
+	$(MAKE) obsidian-export
+	$(MAKE) live-vault-inspect
+
+live-vault-inspect:
+	$(PYTHON) scripts/inspect_live_vault.py --vault $${OBSIDIAN_VAULT_PATH:-.local/obsidian_vault}
+
+obsidian-open-live-run:
+	@VAULT=$${OBSIDIAN_VAULT_PATH:-.local/obsidian_vault}; \
+	DATABASE_URL="$(DRYRUN_DB_URL)" $(PYTHON) -c \
+	"from frontier_ai_risk_observer.obsidian.cli import open_live_run; from pathlib import Path; \
+	success = open_live_run(Path('$$VAULT')); \
+	print('Opened live run' if success else 'No live run found or Obsidian not available')"
+
+daily-report-live-vault-e2e:
+	@if [ -z "$$OBSIDIAN_VAULT_PATH" ]; then \
+		echo "ERROR: OBSIDIAN_VAULT_PATH is not set."; \
+		echo "Set it before running, e.g.:"; \
+		echo "  OBSIDIAN_VAULT_PATH=~/Documents/airo make daily-report-live-vault-e2e"; \
+		exit 1; \
+	fi
+	@echo "=== R1-13B: Live Vault E2E Validation ==="
+	OBSIDIAN_LIVE_LOGGING_ENABLED=true DATABASE_URL="$(DRYRUN_DB_URL)" $(PYTHON) scripts/daily_report.py --run --live-vault
+	$(MAKE) report-quality-check
+	$(MAKE) obsidian-export
+	@echo "=== Inspecting live vault (with requirements) ==="
+	$(PYTHON) scripts/inspect_live_vault.py --vault $${OBSIDIAN_VAULT_PATH} --latest --require-events 1 --require-note-types source,candidate,evidence,signal --db-check
+	@echo "=== Inspecting Obsidian vault ==="
+	$(MAKE) obsidian-inspect
+	@echo "=== R1-13B: E2E Validation Complete ==="

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -24,6 +24,12 @@ from frontier_ai_risk_observer.mcp.schemas import (
     DigestSearchInput,
     DigestStoreInput,
     DuplicateCandidatesInput,
+    EvidenceSearchInput,
+    EvidenceStoreInput,
+    LiveEventAppendInput,
+    LiveNoteUpsertInput,
+    LiveRunFinalizeInput,
+    LiveRunStartInput,
     RawItemSearchInput,
     RawItemSeenCheckInput,
     SignalSearchInput,
@@ -430,6 +436,75 @@ def _run_helper_for_entry(entry: Any, limit: int) -> list:
         return []
 
 
+def risk_evidence_store(evidence: dict[str, Any]) -> dict[str, Any]:
+    """Store an evidence/claim item that Hermes has already extracted."""
+    try:
+        payload = EvidenceStoreInput.model_validate(evidence)
+        with _session_scope() as session:
+            from frontier_ai_risk_observer.services.evidence import (
+                store_evidence_item,
+            )
+            stored = store_evidence_item(
+                session,
+                raw_item_id=payload.raw_item_id,
+                signal_id=payload.signal_id,
+                source_id=payload.source_id,
+                claim_text=payload.claim_text,
+                claim_type=payload.claim_type,
+                evidence_url=payload.evidence_url,
+                evidence_title=payload.evidence_title,
+                evidence_excerpt=payload.evidence_excerpt,
+                evidence_level=payload.evidence_level,
+                confidence=payload.confidence,
+                supports_signal=payload.supports_signal,
+                risk_domains=payload.risk_domains,
+                entities=payload.entities,
+                needs_human_review=payload.needs_human_review,
+                metadata=payload.metadata,
+            )
+    except (ValidationError, ValueError) as exc:
+        return _error("validation_error", str(exc))
+    except Exception as exc:  # noqa: BLE001
+        return _error("database_unavailable", str(exc))
+    from frontier_ai_risk_observer.services.evidence import evidence_to_dict
+    return {"ok": True, "evidence": evidence_to_dict(stored)}
+
+
+def risk_evidence_search(
+    signal_id: str | None = None,
+    raw_item_id: str | None = None,
+    source_id: str | None = None,
+    claim_type: str | None = None,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Search stored evidence/claim items."""
+    try:
+        payload = EvidenceSearchInput(
+            signal_id=signal_id,
+            raw_item_id=raw_item_id,
+            source_id=source_id,
+            claim_type=claim_type,
+            limit=limit,
+        )
+        with _session_scope() as session:
+            from frontier_ai_risk_observer.services.evidence import (
+                evidence_to_dict,
+                search_evidence_items,
+            )
+            items = search_evidence_items(
+                session, **payload.model_dump(),
+            )
+    except (ValidationError, ValueError) as exc:
+        return _error("validation_error", str(exc))
+    except Exception as exc:  # noqa: BLE001
+        return _error("database_unavailable", str(exc))
+    return {
+        "ok": True,
+        "evidence": [evidence_to_dict(item) for item in items],
+        "count": len(items),
+    }
+
+
 def risk_candidate_preprocess(
     title: str,
     url: str = "",
@@ -476,6 +551,322 @@ def risk_candidate_preprocess(
         "notes": result.notes,
         "model_used": result.model_used,
         "advisory_only": result.advisory_only,
+    }
+
+
+# ---------------------------------------------------------------------------
+# R1-13: Live Obsidian Research Logging
+# ---------------------------------------------------------------------------
+
+
+def risk_live_run_start(
+    run_id: str | None = None,
+    title: str = "",
+) -> dict[str, Any]:
+    """Start a live Obsidian research run.
+
+    Creates the live run directory and initial notes in the Obsidian vault.
+    If live logging is disabled, returns ok with live_logging_enabled=false.
+    """
+    try:
+        payload = LiveRunStartInput(run_id=run_id, title=title)
+    except ValidationError as exc:
+        return _error("validation_error", str(exc))
+
+    # Generate run_id if not provided
+    from datetime import UTC, datetime
+
+    actual_run_id = payload.run_id or datetime.now(UTC).strftime("%Y-%m-%d_%H%M%S")
+
+    # Store research event in DB
+    try:
+        with _session_scope() as session:
+            from frontier_ai_risk_observer.services.live_research import (
+                store_research_event,
+            )
+
+            stored = store_research_event(
+                session,
+                run_id=actual_run_id,
+                event_type="run_started",
+                title=payload.title or actual_run_id,
+            )
+            event_id = str(stored.id)
+    except (ValidationError, ValueError) as exc:
+        return _error("validation_error", str(exc))
+    except Exception as exc:
+        return _error("database_unavailable", str(exc))
+
+    # Write to Obsidian vault if live logging enabled
+    live_logging_enabled = False
+    vault_errors: list[str] = []
+    try:
+        from frontier_ai_risk_observer.obsidian.live_writer import LiveVaultConfig
+
+        config = LiveVaultConfig.from_env()
+        live_logging_enabled = config.live_logging_enabled
+        if live_logging_enabled:
+            from frontier_ai_risk_observer.obsidian.live_writer import LiveVaultWriter
+
+            writer = LiveVaultWriter(config)
+            result = writer.start_run(actual_run_id, title=payload.title)
+            vault_errors = result.errors
+    except ValueError as exc:
+        vault_errors.append(str(exc))
+    except Exception as exc:
+        vault_errors.append(str(exc))
+
+    return {
+        "ok": True,
+        "run_id": actual_run_id,
+        "event_id": event_id,
+        "live_logging_enabled": live_logging_enabled,
+        "vault_errors": vault_errors,
+    }
+
+
+def risk_live_event_append(
+    run_id: str,
+    event_type: str,
+    title: str = "",
+    body: str | None = None,
+    source_id: str | None = None,
+    raw_item_id: str | None = None,
+    signal_id: str | None = None,
+    evidence_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Append a structured event to the live research log and timeline."""
+    try:
+        payload = LiveEventAppendInput(
+            run_id=run_id,
+            event_type=event_type,
+            title=title,
+            body=body,
+            source_id=source_id,
+            raw_item_id=raw_item_id,
+            signal_id=signal_id,
+            evidence_id=evidence_id,
+            metadata=metadata or {},
+        )
+    except ValidationError as exc:
+        return _error("validation_error", str(exc))
+
+    # Store research event in DB
+    try:
+        with _session_scope() as session:
+            from frontier_ai_risk_observer.services.live_research import (
+                store_research_event,
+            )
+
+            stored = store_research_event(
+                session,
+                run_id=payload.run_id,
+                event_type=payload.event_type,
+                title=payload.title,
+                body=payload.body,
+                source_id=payload.source_id,
+                raw_item_id=payload.raw_item_id,
+                signal_id=payload.signal_id,
+                evidence_id=payload.evidence_id,
+                metadata=payload.metadata,
+            )
+            event_id = str(stored.id)
+    except (ValidationError, ValueError) as exc:
+        return _error("validation_error", str(exc))
+    except Exception as exc:
+        return _error("database_unavailable", str(exc))
+
+    # Write to Obsidian vault if live logging enabled
+    live_logging_enabled = False
+    vault_errors: list[str] = []
+    try:
+        from frontier_ai_risk_observer.obsidian.live_writer import (
+            LiveEvent,
+            LiveVaultConfig,
+            LiveVaultWriter,
+        )
+
+        config = LiveVaultConfig.from_env()
+        live_logging_enabled = config.live_logging_enabled
+        if live_logging_enabled:
+            writer = LiveVaultWriter(config)
+            event = LiveEvent(
+                event_type=payload.event_type,
+                title=payload.title,
+                body=payload.body,
+                source_id=payload.source_id,
+                raw_item_id=payload.raw_item_id,
+                signal_id=payload.signal_id,
+                evidence_id=payload.evidence_id,
+                metadata=payload.metadata,
+            )
+            result = writer.append_event(payload.run_id, event)
+            vault_errors = result.errors
+    except ValueError as exc:
+        vault_errors.append(str(exc))
+    except Exception as exc:
+        vault_errors.append(str(exc))
+
+    return {
+        "ok": True,
+        "event_id": event_id,
+        "live_logging_enabled": live_logging_enabled,
+        "vault_errors": vault_errors,
+    }
+
+
+def risk_live_note_upsert(
+    run_id: str,
+    note_type: Literal["source", "candidate", "evidence", "signal", "failure"],
+    slug: str,
+    title: str,
+    body: str,
+    source_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Upsert a live note (source/candidate/evidence/signal) in the research vault."""
+    try:
+        payload = LiveNoteUpsertInput(
+            run_id=run_id,
+            note_type=note_type,
+            slug=slug,
+            title=title,
+            body=body,
+            source_id=source_id,
+            metadata=metadata or {},
+        )
+    except ValidationError as exc:
+        return _error("validation_error", str(exc))
+
+    # note_type is validated by Pydantic Literal in the schema
+
+    # Store research event in DB
+    try:
+        with _session_scope() as session:
+            from frontier_ai_risk_observer.services.live_research import (
+                store_research_event,
+            )
+
+            stored = store_research_event(
+                session,
+                run_id=payload.run_id,
+                event_type=f"{payload.note_type}_note_upserted",
+                title=payload.title,
+                source_id=payload.source_id,
+                metadata=payload.metadata,
+            )
+            event_id = str(stored.id)
+    except (ValidationError, ValueError) as exc:
+        return _error("validation_error", str(exc))
+    except Exception as exc:
+        return _error("database_unavailable", str(exc))
+
+    # Write to Obsidian vault if live logging enabled
+    live_logging_enabled = False
+    vault_errors: list[str] = []
+    notes_written = 0
+    try:
+        from frontier_ai_risk_observer.obsidian.live_writer import LiveVaultConfig, LiveVaultWriter
+
+        config = LiveVaultConfig.from_env()
+        live_logging_enabled = config.live_logging_enabled
+        if live_logging_enabled:
+            writer = LiveVaultWriter(config)
+            if payload.note_type == "failure":
+                result = writer.record_failure(
+                    payload.run_id,
+                    source_id=payload.slug,
+                    failure_type="failure",
+                    message=payload.body,
+                    metadata=payload.metadata,
+                )
+            else:
+                method_map = {
+                    "source": writer.upsert_source_note,
+                    "candidate": writer.upsert_candidate_note,
+                    "evidence": writer.upsert_evidence_note,
+                    "signal": writer.upsert_signal_note,
+                }
+                method = method_map[payload.note_type]
+                result = method(
+                    payload.run_id,
+                    payload.slug,
+                    title=payload.title,
+                    body=payload.body,
+                    metadata=payload.metadata,
+                )
+            notes_written = result.notes_written + result.notes_updated
+            vault_errors = result.errors
+    except ValueError as exc:
+        vault_errors.append(str(exc))
+    except Exception as exc:
+        vault_errors.append(str(exc))
+
+    return {
+        "ok": True,
+        "event_id": event_id,
+        "note_type": payload.note_type,
+        "slug": payload.slug,
+        "notes_written": notes_written,
+        "live_logging_enabled": live_logging_enabled,
+        "vault_errors": vault_errors,
+    }
+
+
+def risk_live_run_finalize(
+    run_id: str,
+    summary: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Finalize a live Obsidian research run."""
+    try:
+        payload = LiveRunFinalizeInput(run_id=run_id, summary=summary or {})
+    except ValidationError as exc:
+        return _error("validation_error", str(exc))
+
+    # Store research event in DB
+    try:
+        with _session_scope() as session:
+            from frontier_ai_risk_observer.services.live_research import (
+                store_research_event,
+            )
+
+            stored = store_research_event(
+                session,
+                run_id=payload.run_id,
+                event_type="run_finalized",
+                title="Run finalized",
+                metadata=payload.summary,
+            )
+            event_id = str(stored.id)
+    except (ValidationError, ValueError) as exc:
+        return _error("validation_error", str(exc))
+    except Exception as exc:
+        return _error("database_unavailable", str(exc))
+
+    # Finalize Obsidian vault if live logging enabled
+    live_logging_enabled = False
+    vault_errors: list[str] = []
+    try:
+        from frontier_ai_risk_observer.obsidian.live_writer import LiveVaultConfig, LiveVaultWriter
+
+        config = LiveVaultConfig.from_env()
+        live_logging_enabled = config.live_logging_enabled
+        if live_logging_enabled:
+            writer = LiveVaultWriter(config)
+            result = writer.finalize_run(payload.run_id, summary=payload.summary)
+            vault_errors = result.errors
+    except ValueError as exc:
+        vault_errors.append(str(exc))
+    except Exception as exc:
+        vault_errors.append(str(exc))
+
+    return {
+        "ok": True,
+        "run_id": payload.run_id,
+        "event_id": event_id,
+        "live_logging_enabled": live_logging_enabled,
+        "vault_errors": vault_errors,
     }
 
 
@@ -570,6 +961,12 @@ MCP_TOOL_FUNCTIONS = [
     risk_source_health_summary,
     risk_discovery_helper_preview,
     risk_candidate_preprocess,
+    risk_evidence_store,
+    risk_evidence_search,
+    risk_live_run_start,
+    risk_live_event_append,
+    risk_live_note_upsert,
+    risk_live_run_finalize,
 ]
 
 

@@ -33,6 +33,7 @@
 仅限以下本地状态/搜索工具：
 
 - `risk_signal_search` — 搜索已存储的风险信号
+- `risk_evidence_search` — 搜索已存储的证据/声明
 - `risk_raw_item_search` — 搜索已收集的候选条目
 - `risk_digest_search` — 搜索已有的简报
 - `risk_registry_summary` — 查看注册表摘要
@@ -105,9 +106,12 @@
 1. 先用 `risk_signal_search` 查看今天存储的信号
 2. 用 `risk_raw_item_search` 查看最近收集的候选条目
 3. 用 `risk_digest_search` 查看是否已有今日简报
-4. 基于已有数据，撰写完整的中文风险简报
-5. 用 `risk_digest_store` 存储最终简报（status 用 `local_daily_report`）
-6. 在输出中返回最终中文简报全文
+4. 用 `risk_evidence_search` 查看已存储的证据
+5. 基于已有数据，撰写完整的中文风险简报
+6. **对每条 Top Signal，用 `risk_evidence_store` 存储至少一条支撑证据**。如果信号有证据 URL 但没有已存储的证据项，创建一条。包含 claim_text、evidence_url、evidence_excerpt（如可提取）、confidence、supports_signal=true。如果摘录不可获取，设 needs_human_review=true。
+7. 用 `risk_digest_store` 存储最终简报（status 用 `local_daily_report`）
+8. 如果实时研究记录已开始，调用 `risk_live_run_finalize` 结束记录。传入之前 `risk_live_run_start` 返回的 `run_id`。summary 中包含 `signal_count`、`evidence_count`、`source_count` 等统计
+9. 在输出中返回最终中文简报全文
 
 ## 关于超时/未完成
 

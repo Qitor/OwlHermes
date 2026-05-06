@@ -16,6 +16,13 @@ class Settings:
     hermes_config_path: Path = Path("configs/hermes_config.example.yaml")
     source_registry_dir: Path = Path("source_registry")
     log_level: str = "INFO"
+    obsidian_vault_path: Path = Path(".local/obsidian_vault")
+    obsidian_live_logging_enabled: bool = False
+    obsidian_live_runs_dir: str = "08_Live_Runs"
+    obsidian_live_append_to_daily: bool = True
+    obsidian_live_open_after_start: bool = False
+    obsidian_live_event_max_chars: int = 4000
+    obsidian_live_flush_mode: str = "immediate"
 
 
 def _expand_path(value: str) -> Path:
@@ -33,6 +40,27 @@ def load_settings() -> Settings:
             os.environ.get("SOURCE_REGISTRY_DIR", str(Settings.source_registry_dir))
         ),
         log_level=os.environ.get("LOG_LEVEL", Settings.log_level).upper(),
+        obsidian_vault_path=_expand_path(
+            os.environ.get("OBSIDIAN_VAULT_PATH", str(Settings.obsidian_vault_path))
+        ),
+        obsidian_live_logging_enabled=os.environ.get(
+            "OBSIDIAN_LIVE_LOGGING_ENABLED", "false"
+        ).lower() in ("true", "1", "yes"),
+        obsidian_live_runs_dir=os.environ.get(
+            "OBSIDIAN_LIVE_RUNS_DIR", Settings.obsidian_live_runs_dir
+        ),
+        obsidian_live_append_to_daily=os.environ.get(
+            "OBSIDIAN_LIVE_APPEND_TO_DAILY", "true"
+        ).lower() in ("true", "1", "yes"),
+        obsidian_live_open_after_start=os.environ.get(
+            "OBSIDIAN_LIVE_OPEN_AFTER_START", "false"
+        ).lower() in ("true", "1", "yes"),
+        obsidian_live_event_max_chars=int(
+            os.environ.get("OBSIDIAN_LIVE_EVENT_MAX_CHARS", "4000")
+        ),
+        obsidian_live_flush_mode=os.environ.get(
+            "OBSIDIAN_LIVE_FLUSH_MODE", Settings.obsidian_live_flush_mode
+        ),
     )
 
 

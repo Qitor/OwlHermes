@@ -114,8 +114,31 @@
 - `risk_raw_item_store` — 存储新发现的候选证据
 - `risk_source_run_record` — 记录来源检查情况
 - `risk_signal_store` — 存储判断后的风险信号
+- `risk_evidence_store` — 存储支撑或削弱信号的证据/声明（claim_text, evidence_url, evidence_excerpt, confidence, supports_signal）
+- `risk_evidence_search` — 查找已存储的证据
 - `risk_digest_store` — 存储最终简报（status 用 `local_daily_report`）
 - `risk_candidate_preprocess` — 对长候选文本获取摘要、证据片段和轻量分类（**仅供参考，不构成最终判断**）
+
+**实时 Obsidian 写入工具（R1-13，可选）**：
+- `risk_live_run_start` — 开始一次实时研究记录（如可用）
+- `risk_live_event_append` — 追加研究事件到实时日志
+- `risk_live_note_upsert` — 写入/更新来源、候选、证据或信号的实时笔记
+- `risk_live_run_finalize` — 结束实时研究记录
+
+如果实时写入工具可用（`risk_live_run_start` 返回 `live_logging_enabled: true`），请按以下方式使用：
+1. 研究开始时调用 `risk_live_run_start`，**记住返回的 `run_id`**
+2. 每个重要研究步骤用 `risk_live_event_append` 记录（来源选定、候选发现、证据提取、信号存储等），**每次都传入 `run_id`**
+3. 对持久化的来源/候选/证据/信号用 `risk_live_note_upsert` 写入笔记，**每次都传入 `run_id`**
+4. 研究结束时调用 `risk_live_run_finalize`，**传入 `run_id`**
+
+**调用顺序（重要）**：
+- `risk_live_run_start` → 获得 `run_id` → 之后所有 live 调用必须传入此 `run_id`
+- `event_type` 必须是以下之一：`source_selected`, `source_check_started`, `source_check_completed`, `source_failed`, `candidate_found`, `candidate_seen_check`, `candidate_stored`, `evidence_extracted`, `signal_promoted`, `signal_stored`, `digest_stored`, `run_finalized`, `note`, `warning`
+- `note_type` 必须是以下之一：`source`, `candidate`, `evidence`, `signal`, `failure`
+
+**重要安全规则**：
+- 实时笔记只记录可观察的研究状态（来源检查、候选发现、证据摘录、判断摘要、不确定性、下一步），**不写隐藏推理或私密思维链**
+- 如果实时写入工具不可用或返回 `live_logging_enabled: false`，正常继续研究流程
 
 **辅助预处理工具使用说明**：
 - `risk_candidate_preprocess` 可用于长文本的快速摘要和轻量分类，帮助你更快筛选候选
@@ -143,6 +166,8 @@
 - 对每条候选，先 `risk_raw_item_seen_check` 再 `risk_raw_item_store`，避免重复
 - 对每个检查过的来源，`risk_source_run_record` 记录结果
 - 只在你判断"这确实改变了风险判断"时，才 `risk_signal_store`
+- **对每条 Top Signal，必须用 `risk_evidence_store` 存储至少一条支撑证据**，包含 claim_text、evidence_url（如有）、evidence_excerpt（如可提取）、confidence、supports_signal=true。如果证据摘录不可获取，设 needs_human_review=true 并说明 needs_review_reason。中间证据对象是产品的一部分——不要只存储最终简报。
+- `risk_signal_store` 应包含 what_changed、why_it_matters、what_to_watch_next 字段
 - 信号数为 0 是可以接受的 — 没有新信号本身也是信息
 
 ## 运行模式
