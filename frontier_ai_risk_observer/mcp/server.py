@@ -254,17 +254,33 @@ def risk_signal_store(signal: dict[str, Any]) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         return _error("database_unavailable", str(exc))
 
+    # Build rich signal body from stored DB data (more reliable than Hermes input)
+    stored_dict = signal_to_dict(stored)
+    body_parts = []
+    if stored_dict.get("what_changed"):
+        body_parts.append(f"**什么改变了**: {stored_dict['what_changed']}")
+    if stored_dict.get("why_it_matters"):
+        body_parts.append(f"**为什么重要**: {stored_dict['why_it_matters']}")
+    if stored_dict.get("what_to_watch_next"):
+        body_parts.append(f"**接下来关注**: {stored_dict['what_to_watch_next']}")
+    if stored_dict.get("summary"):
+        body_parts.append(f"**摘要**: {stored_dict['summary']}")
+    body_parts.append(
+        f"**严重度**: {stored_dict.get('severity', 'N/A')}/5 | "
+        f"**置信度**: {stored_dict.get('confidence', 'N/A')}/5"
+    )
+    if stored_dict.get("risk_domains"):
+        body_parts.append(f"**风险域**: {', '.join(stored_dict['risk_domains'])}")
+    if stored_dict.get("primary_source_url"):
+        body_parts.append(f"**证据URL**: {stored_dict['primary_source_url']}")
+    signal_body = "\n\n".join(body_parts)
+
     # Auto-mirror to live vault (best-effort)
     mirror_info = _auto_mirror_to_live_vault(
         "signal",
         slug=payload.title or "untitled-signal",
         title=payload.title or "Untitled Signal",
-        body=(
-            f"**What changed**: {payload.what_changed}\n\n"
-            f"**Why it matters**: {payload.why_it_matters}\n\n"
-            f"**What to watch next**: {payload.what_to_watch_next}\n\n"
-            f"**Summary**: {payload.summary}"
-        ),
+        body=signal_body,
         source_id=payload.source_id,
         link_ids={
             "related_evidence_ids": [],
@@ -274,15 +290,15 @@ def risk_signal_store(signal: dict[str, Any]) -> dict[str, Any]:
         },
         risk_domains=payload.risk_domains,
         extra_metadata={
-            "severity": payload.severity,
-            "confidence": payload.confidence,
-            "what_changed": payload.what_changed,
-            "why_it_matters": payload.why_it_matters,
-            "what_to_watch_next": payload.what_to_watch_next,
+            "severity": stored_dict.get("severity"),
+            "confidence": stored_dict.get("confidence"),
+            "what_changed": stored_dict.get("what_changed", ""),
+            "why_it_matters": stored_dict.get("why_it_matters", ""),
+            "what_to_watch_next": stored_dict.get("what_to_watch_next", ""),
         },
     )
 
-    result = {"ok": True, "signal": signal_to_dict(stored)}
+    result = {"ok": True, "signal": stored_dict}
     if mirror_info.get("mirrored"):
         result["vault_mirror"] = mirror_info
     return result
@@ -584,19 +600,35 @@ def risk_evidence_store(evidence: dict[str, Any]) -> dict[str, Any]:
         return _error("database_unavailable", str(exc))
 
     # Auto-mirror to live vault (best-effort)
+    from frontier_ai_risk_observer.services.evidence import evidence_to_dict
+
+    stored_dict = evidence_to_dict(stored)
+    body_parts = []
+    if stored_dict.get("claim_text"):
+        body_parts.append(f"**主张**: {stored_dict['claim_text']}")
+    if stored_dict.get("claim_type"):
+        body_parts.append(f"**类型**: {stored_dict['claim_type']}")
+    if stored_dict.get("evidence_url"):
+        body_parts.append(f"**证据URL**: {stored_dict['evidence_url']}")
+    if stored_dict.get("evidence_excerpt"):
+        excerpt = stored_dict["evidence_excerpt"]
+        if len(excerpt) > 1000:
+            excerpt = excerpt[:1000] + "..."
+        body_parts.append(f"**摘录**: {excerpt}")
+    conf = stored_dict.get("confidence")
+    body_parts.append(f"**置信度**: {conf or 'N/A'}/5")
+    if stored_dict.get("supports_signal") is not None:
+        body_parts.append(f"**支撑信号**: {'是' if stored_dict['supports_signal'] else '否'}")
+    if stored_dict.get("needs_human_review"):
+        body_parts.append("**需人工审查**: 是")
+    evidence_body = "\n\n".join(body_parts)
+
     claim_slug = (payload.claim_text or "untitled-evidence")[:60]
     mirror_info = _auto_mirror_to_live_vault(
         "evidence",
         slug=claim_slug,
         title=payload.evidence_title or claim_slug,
-        body=(
-            f"**Claim**: {payload.claim_text}\n\n"
-            f"**Type**: {payload.claim_type}\n\n"
-            f"**Evidence URL**: {payload.evidence_url}\n\n"
-            f"**Excerpt**: {payload.evidence_excerpt}\n\n"
-            f"**Confidence**: {payload.confidence}/5\n\n"
-            f"**Supports signal**: {payload.supports_signal}"
-        ),
+        body=evidence_body,
         source_id=payload.source_id,
         link_ids={
             "related_signal_ids": (
@@ -613,8 +645,7 @@ def risk_evidence_store(evidence: dict[str, Any]) -> dict[str, Any]:
         },
     )
 
-    from frontier_ai_risk_observer.services.evidence import evidence_to_dict
-    result = {"ok": True, "evidence": evidence_to_dict(stored)}
+    result = {"ok": True, "evidence": stored_dict}
     if mirror_info.get("mirrored"):
         result["vault_mirror"] = mirror_info
     return result
@@ -1370,7 +1401,8 @@ def _auto_mirror_to_live_vault(
 
     Called from risk_signal_store, risk_evidence_store, and risk_raw_item_store
     to automatically create live notes even if Hermes doesn't explicitly call
-    risk_live_note_upsert. Returns info about what was mirrored.
+    risk_live_note_upsert. Also appends events to the live research log/timeline.
+    Returns info about what was mirrored.
     """
     mirror_info: dict[str, Any] = {
         "mirrored": False,
@@ -1411,6 +1443,19 @@ def _auto_mirror_to_live_vault(
         today = datetime.now(UTC).strftime("%Y-%m-%d")
         metadata["daily_report_date"] = today
 
+        # Compute note vault path for timeline wikilink
+        from frontier_ai_risk_observer.obsidian.markdown import slugify_filename
+
+        subdir_map = {
+            "signal": "Signals",
+            "evidence": "Evidence",
+            "candidate": "Candidates",
+            "source": "Sources",
+        }
+        subdir = subdir_map.get(note_type, "Candidates")
+        safe_slug = slugify_filename(slug)
+        note_vault_path = f"08_Live_Runs/{run_id}/{subdir}/{safe_slug}"
+
         method_map = {
             "signal": writer.upsert_signal_note,
             "evidence": writer.upsert_evidence_note,
@@ -1424,23 +1469,32 @@ def _auto_mirror_to_live_vault(
                 mirror_info["mirrored"] = True
                 from frontier_ai_risk_observer.obsidian.links import note_vault_relative_path
 
-                subdir_map = {
-                    "signal": "Signals",
-                    "evidence": "Evidence",
-                    "candidate": "Candidates",
-                    "source": "Sources",
-                }
-                from frontier_ai_risk_observer.obsidian.markdown import slugify_filename
-
-                subdir = subdir_map[note_type]
                 note_path = (
                     config.vault_path / "AI-Risk-Intelligence"
                     / config.runs_dir_name / run_id
-                    / subdir / f"{slugify_filename(slug)}.md"
+                    / subdir / f"{safe_slug}.md"
                 )
                 mirror_info["note_path"] = note_vault_relative_path(
                     config.vault_path, note_path,
                 )
+
+                # Auto-append event to live research log + timeline
+                event_type_map = {
+                    "signal": "signal_stored",
+                    "evidence": "evidence_stored",
+                    "candidate": "candidate_stored",
+                    "source": "source_checked",
+                }
+                from frontier_ai_risk_observer.obsidian.live_writer import LiveEvent
+
+                event = LiveEvent(
+                    event_type=event_type_map.get(note_type, "note"),
+                    title=title,
+                    body=body[:500] if body else None,
+                    source_id=source_id,
+                    note_vault_path=note_vault_path,
+                )
+                writer.append_event(run_id, event)
     except Exception as exc:  # noqa: BLE001
         mirror_info["error"] = str(exc)
 
