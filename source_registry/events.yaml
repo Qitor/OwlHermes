@@ -29,6 +29,16 @@ events:
     enabled: true
     risk_focus: [extreme_risk, international_coordination, ai_safety_policy]
     watch_for: [updates, research, opportunities, policy_guide]
+    access_status: timeout_prone
+    failure_policy:
+      max_attempts: 1
+      timeout_seconds: 15
+      on_failure: skip
+    known_failures:
+      - type: timeout
+        message: Page frequently times out
+        recommended_action: Retry once, skip on failure
+    notes_for_hermes: Page often times out. Try once and skip if it fails.
     extractor_strategy:
       diff_mode: list_items
       requires_js: false
@@ -66,6 +76,10 @@ events:
     helper_type: manual
     known_issues: URL points to 2023 Bletchley Park summit page only; no single page tracks the full summit chain (Seoul 2024, Paris 2025, India/Geneva upcoming). Needs human review to identify current official pages for each summit.
     requires_human_review: true
+    access_status: manual_only
+    collection_frequency: monthly
+    primary_collection_method: manual
+    notes_for_hermes: No automated collection possible. Each summit has a different official page. Manual review required monthly.
     extractor_strategy:
       diff_mode: list_items
       requires_js: false

@@ -78,13 +78,21 @@ def risk_registry_list_due_sources(
     limit: int | None = None,
     kind: str | None = None,
     risk_domain: str | None = None,
+    access_status: str | None = None,
 ) -> dict[str, Any]:
-    """List registry entries Hermes should consider for a daily run."""
+    """List registry entries Hermes should consider for a daily run.
+
+    R1-14: Optional access_status filter (e.g. "ok", "degraded", "blocked")
+    to select only sources with a specific reliability status.
+    """
     entries = registry_service.list_due_sources(
         limit=limit,
         kind=_registry_kind(kind),
         risk_domain=risk_domain,
     )
+    # R1-14: Filter by access_status if provided
+    if access_status:
+        entries = [e for e in entries if e.get("access_status") == access_status]
     return {"ok": True, "entries": entries, "count": len(entries)}
 
 
@@ -477,16 +485,24 @@ def risk_discovery_helper_preview(
 
     helper_type = getattr(entry, "helper_type", None)
     if not helper_type or helper_type in ("none", "manual"):
-        return {
+        result: dict[str, Any] = {
             "ok": True,
             "source_id": source_id,
             "helper_type": helper_type,
             "candidates": [],
             "message": "No automated helper configured for this source.",
         }
+        # R1-14: Include reliability metadata
+        access_status = getattr(entry, "access_status", None)
+        if access_status:
+            result["access_status"] = access_status
+        notes = getattr(entry, "notes_for_hermes", None)
+        if notes:
+            result["notes_for_hermes"] = notes
+        return result
 
     if not fetch:
-        return {
+        result: dict[str, Any] = {
             "ok": True,
             "source_id": source_id,
             "helper_type": helper_type,
@@ -494,27 +510,104 @@ def risk_discovery_helper_preview(
             "candidates": [],
             "message": "Set fetch=true to run the helper and retrieve candidates.",
         }
+        # R1-14: Include reliability metadata even in preview mode
+        access_status = getattr(entry, "access_status", None)
+        if access_status:
+            result["access_status"] = access_status
+        notes = getattr(entry, "notes_for_hermes", None)
+        if notes:
+            result["notes_for_hermes"] = notes
+        return result
 
     # Fetch mode — run the appropriate helper
     try:
-        candidates = _run_helper_for_entry(entry, limit)
-        return {
+        candidates, helper_meta = _run_helper_for_entry(entry, limit)
+        result = {
             "ok": True,
             "source_id": source_id,
             "helper_type": helper_type,
             "candidates": [c.model_dump(mode="json") for c in candidates],
             "count": len(candidates),
         }
+        # R1-14: Merge helper metadata
+        result.update(helper_meta)
+        return result
     except Exception as exc:  # noqa: BLE001
         return _error("helper_error", str(exc))
 
 
-def _run_helper_for_entry(entry: Any, limit: int) -> list:
-    """Run the appropriate helper for a registry entry. Network access required."""
+def _run_helper_for_entry(entry: Any, limit: int) -> tuple[list, dict[str, Any]]:
+    """Run the appropriate helper for a registry entry. Network access required.
+
+    Returns (candidates, metadata) where metadata includes access_status,
+    failure info, and fallback recommendations.
+    """
+
+    metadata: dict[str, Any] = {}
+
+    # R1-14: Access status check — skip blocked/disabled/manual_only
+    access_status = getattr(entry, "access_status", None)
+    if access_status:
+        metadata["access_status"] = access_status
+    if access_status in ("blocked", "disabled", "manual_only"):
+        metadata["skipped_reason"] = f"access_status={access_status}"
+        metadata["count"] = 0
+        notes = getattr(entry, "notes_for_hermes", None)
+        if notes:
+            metadata["notes_for_hermes"] = notes
+        # Check if search_fallback is configured
+        fallbacks = getattr(entry, "fallback_methods", None) or []
+        if "search_fallback" in fallbacks:
+            metadata["search_fallback_recommended"] = True
+        if access_status == "manual_only":
+            metadata["manual_review_required"] = True
+        return [], metadata
 
     helper_type = getattr(entry, "helper_type", None)
     source_id = entry.id
     max_items = getattr(entry, "max_items", None) or limit
+
+    # R1-14: Extract failure policy
+    failure_policy = getattr(entry, "failure_policy", None)
+    max_attempts = getattr(failure_policy, "max_attempts", 3) if failure_policy else 3
+    on_failure = getattr(failure_policy, "on_failure", "skip") if failure_policy else "skip"
+
+    notes = getattr(entry, "notes_for_hermes", None)
+    if notes:
+        metadata["notes_for_hermes"] = notes
+
+    candidates = []
+    try:
+        candidates = _dispatch_helper(entry, helper_type, source_id, max_items, max_attempts)
+    except Exception as exc:  # noqa: BLE001
+        metadata["helper_error"] = str(exc)
+        metadata["helper_failed"] = True
+
+        # R1-14: Fallback chain
+        if on_failure == "fallback":
+            fallback_methods = getattr(entry, "fallback_methods", None) or []
+            for fallback in fallback_methods:
+                if fallback == "search_fallback":
+                    metadata["search_fallback_recommended"] = True
+                    break  # search_fallback is not a real backend helper
+                elif fallback == "manual":
+                    metadata["manual_review_required"] = True
+                    break
+        elif on_failure == "manual_review":
+            metadata["manual_review_required"] = True
+
+    metadata["count"] = len(candidates)
+    return candidates, metadata
+
+
+def _dispatch_helper(
+    entry: Any,
+    helper_type: str | None,
+    source_id: str,
+    max_items: int,
+    max_attempts: int,
+) -> list:
+    """Dispatch to the appropriate helper based on helper_type."""
 
     if helper_type == "scrapling_official_page":
         from frontier_ai_risk_observer.helpers.scrapling_official_page import fetch_and_extract

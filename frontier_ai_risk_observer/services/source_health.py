@@ -26,6 +26,13 @@ def source_health_summary() -> dict[str, Any]:
     missing_feed_url: list[dict[str, str]] = []
     invalid_urls: list[dict[str, str]] = []
 
+    # R1-14: Reliability reporting
+    access_status_counts: Counter[str] = Counter()
+    degraded_or_blocked: list[dict[str, str]] = []
+    timeout_prone: list[dict[str, str]] = []
+    collection_method_counts: Counter[str] = Counter()
+    all_known_failures: list[dict[str, Any]] = []
+
     # Sources
     for entry in validated.sources:
         ht = getattr(entry, "helper_type", None) or "none"
@@ -37,6 +44,10 @@ def source_health_summary() -> dict[str, Any]:
         if ht in ("rss",) and not getattr(entry, "feed_url", None):
             missing_feed_url.append({"id": entry.id, "name": entry.name})
         _check_issues(entry, known_issues_entries, human_review_entries, invalid_urls)
+        _check_reliability(
+            entry, access_status_counts, degraded_or_blocked,
+            timeout_prone, collection_method_counts, all_known_failures,
+        )
 
     # Podcasts
     for entry in validated.podcasts:
@@ -49,6 +60,10 @@ def source_health_summary() -> dict[str, Any]:
         if ht == "podcast_rss" and not getattr(entry, "feed_url", None):
             missing_feed_url.append({"id": entry.id, "name": entry.name})
         _check_issues(entry, known_issues_entries, human_review_entries, invalid_urls)
+        _check_reliability(
+            entry, access_status_counts, degraded_or_blocked,
+            timeout_prone, collection_method_counts, all_known_failures,
+        )
 
     # Events
     for entry in validated.events:
@@ -59,12 +74,20 @@ def source_health_summary() -> dict[str, Any]:
             if not getattr(entry, "scrapling_url", None):
                 missing_scrapling_url.append({"id": entry.id, "name": entry.name})
         _check_issues(entry, known_issues_entries, human_review_entries, invalid_urls)
+        _check_reliability(
+            entry, access_status_counts, degraded_or_blocked,
+            timeout_prone, collection_method_counts, all_known_failures,
+        )
 
     # Benchmarks
     for entry in validated.benchmarks:
         ht = getattr(entry, "helper_type", None) or "none"
         helper_counts[f"benchmark:{ht}"] += 1
         _check_issues(entry, known_issues_entries, human_review_entries, invalid_urls)
+        _check_reliability(
+            entry, access_status_counts, degraded_or_blocked,
+            timeout_prone, collection_method_counts, all_known_failures,
+        )
 
     return {
         "ok": True,
@@ -78,6 +101,13 @@ def source_health_summary() -> dict[str, Any]:
         "requires_human_review": human_review_entries[:10],
         "invalid_urls_count": len(invalid_urls),
         "invalid_urls": invalid_urls[:10],
+        # R1-14: Reliability fields
+        "access_status_counts": dict(access_status_counts),
+        "degraded_or_blocked": degraded_or_blocked,
+        "timeout_prone": timeout_prone,
+        "collection_method_counts": dict(collection_method_counts),
+        "recent_known_failures_count": len(all_known_failures),
+        "recent_known_failures": all_known_failures[:10],
     }
 
 
@@ -102,3 +132,41 @@ def _check_issues(
 
 def _is_valid_url(url: str) -> bool:
     return url.startswith(("http://", "https://")) and len(url.split("://", 1)[1]) > 0
+
+
+def _check_reliability(
+    entry: Any,
+    access_status_counts: Counter[str],
+    degraded_or_blocked: list[dict[str, str]],
+    timeout_prone: list[dict[str, str]],
+    collection_method_counts: Counter[str],
+    all_known_failures: list[dict[str, Any]],
+) -> None:
+    """R1-14: Collect reliability metadata from a registry entry."""
+    status = getattr(entry, "access_status", None)
+    if status:
+        access_status_counts[status] += 1
+        if status in ("degraded", "blocked"):
+            degraded_or_blocked.append({
+                "id": entry.id,
+                "name": getattr(entry, "name", entry.id),
+                "access_status": status,
+            })
+        elif status == "timeout_prone":
+            timeout_prone.append({
+                "id": entry.id,
+                "name": getattr(entry, "name", entry.id),
+                "access_status": status,
+            })
+
+    method = getattr(entry, "primary_collection_method", None)
+    if method:
+        collection_method_counts[method] += 1
+
+    failures = getattr(entry, "known_failures", None) or []
+    for failure in failures:
+        all_known_failures.append({
+            "id": entry.id,
+            "type": failure.type,
+            "message": failure.message,
+        })

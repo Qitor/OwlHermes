@@ -11,6 +11,42 @@ from frontier_ai_risk_observer.registry.loader import RegistryBundle
 
 Priority = Literal["high", "medium", "low"]
 
+# ── R1-14: Source reliability types ───────────────────────────────────
+
+AccessStatus = Literal["ok", "degraded", "blocked", "timeout_prone", "manual_only", "disabled"]
+CollectionFrequency = Literal["daily", "weekly", "biweekly", "monthly", "manual"]
+CollectionMethod = Literal[
+    "rss", "podcast_rss", "sitemap", "official_page_links", "browser_list_page",
+    "arxiv_api", "arxiv_oai_pmh", "search_fallback", "manual",
+]
+FailureOnFailure = Literal["skip", "fallback", "manual_review"]
+
+
+class FailurePolicy(BaseModel):
+    """Configurable failure handling for source collection."""
+
+    model_config = ConfigDict(extra="allow")
+
+    max_attempts: int = 3
+    timeout_seconds: float = 30.0
+    on_failure: FailureOnFailure = "skip"
+    report_in_digest: bool = True
+
+
+class KnownFailure(BaseModel):
+    """A known, recurring failure for a source entry."""
+
+    model_config = ConfigDict(extra="allow")
+
+    type: str
+    message: str
+    observed_in_round: str | None = None
+    observed_at: str | None = None
+    recommended_action: str | None = None
+
+
+# ── End R1-14 types ───────────────────────────────────────────────────
+
 
 class RegistryValidationError(ValueError):
     """Raised when registry entries fail semantic validation."""
@@ -65,11 +101,30 @@ class RegistryEntryModel(BaseModel):
     name: str
     enabled: bool = True
     notes: str | None = None
+    # R1-14: Reliability metadata (all optional for backward compat)
+    access_status: AccessStatus | None = None
+    collection_frequency: CollectionFrequency | None = None
+    primary_collection_method: CollectionMethod | None = None
+    fallback_methods: list[CollectionMethod] | None = None
+    failure_policy: FailurePolicy | None = None
+    known_failures: list[KnownFailure] | None = None
+    notes_for_hermes: str | None = None
 
     @field_validator("id", "name")
     @classmethod
     def validate_required_text(cls, value: str) -> str:
         return _validate_non_empty_string(value, "required text field")
+
+    @model_validator(mode="after")
+    def validate_fallback_excludes_primary(self) -> RegistryEntryModel:
+        if self.primary_collection_method and self.fallback_methods:
+            if self.primary_collection_method in self.fallback_methods:
+                msg = (
+                    f"fallback_methods must not include "
+                    f"primary_collection_method '{self.primary_collection_method}'"
+                )
+                raise ValueError(msg)
+        return self
 
 
 class SourceEntry(RegistryEntryModel):

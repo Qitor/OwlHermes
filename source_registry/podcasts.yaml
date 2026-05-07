@@ -6,7 +6,7 @@ podcasts:
     category: podcast
     modality: podcast_transcript
     url: https://axrp.net/
-    feed_url: null
+    feed_url: https://axrp.net/feed.xml
     collector: podcast_feed
     priority: high
     refresh_interval: weekly
@@ -14,12 +14,13 @@ podcasts:
     risk_focus: [ai_xrisk, alignment, evals, interpretability, governance]
     transcript_strategy: official_website
     notable_entities: [Daniel Filan]
-    helper_type: scrapling_official_page
-    scrapling_url: https://axrp.net/
+    helper_type: podcast_rss
     max_items: 10
     lookback_days: 30
-    known_issues: No RSS feed URL found in registry; R1-08 found no recent episodes.
-    requires_human_review: true
+    access_status: ok
+    collection_frequency: weekly
+    primary_collection_method: podcast_rss
+    notes_for_hermes: Use RSS feed for episode discovery. Irregular schedule — check weekly.
     extractor_strategy:
       transcript_source: official
       diff_mode: episode_list
@@ -32,7 +33,7 @@ podcasts:
     category: podcast
     modality: podcast_episode
     url: https://www.dwarkesh.com/
-    feed_url: null
+    feed_url: https://www.dwarkesh.com/podcast.rss
     collector: podcast_feed
     priority: high
     refresh_interval: weekly
@@ -40,6 +41,11 @@ podcasts:
     risk_focus: [frontier_labs, scaling, governance, ai_strategy, national_security]
     transcript_strategy: website_if_available
     notable_entities: [Dwarkesh Patel]
+    helper_type: podcast_rss
+    access_status: degraded
+    collection_frequency: weekly
+    primary_collection_method: podcast_rss
+    notes_for_hermes: RSS feed URL may need verification. Browse manually if feed fails.
     extractor_strategy:
       transcript_source: official_or_page
       diff_mode: episode_list
@@ -52,7 +58,7 @@ podcasts:
     category: podcast
     modality: podcast_transcript
     url: https://80000hours.org/podcast/
-    feed_url: null
+    feed_url: https://80000hours.org/podcast/feed/
     collector: podcast_feed
     priority: high
     refresh_interval: weekly
@@ -60,6 +66,10 @@ podcasts:
     risk_focus: [ai_safety, biosecurity, governance, existential_risk]
     transcript_strategy: official_website
     notable_entities: []
+    helper_type: podcast_rss
+    access_status: ok
+    collection_frequency: weekly
+    primary_collection_method: podcast_rss
     extractor_strategy:
       transcript_source: official
       diff_mode: episode_list
@@ -80,6 +90,9 @@ podcasts:
     risk_focus: [frontier_labs, agents, evals, productization, ai_safety]
     transcript_strategy: website_or_youtube
     notable_entities: []
+    access_status: degraded
+    collection_frequency: weekly
+    notes_for_hermes: No known RSS feed. Browse manually to discover episodes.
     extractor_strategy:
       transcript_source: website_or_youtube_caption
       diff_mode: episode_list
@@ -92,7 +105,7 @@ podcasts:
     category: podcast
     modality: podcast_episode
     url: https://www.latent.space/
-    feed_url: null
+    feed_url: https://www.latent.space/feed
     collector: podcast_feed
     priority: medium
     refresh_interval: weekly
@@ -100,6 +113,11 @@ podcasts:
     risk_focus: [agents, model_release, open_models, developer_ecosystem]
     transcript_strategy: website_if_available
     notable_entities: []
+    helper_type: podcast_rss
+    access_status: degraded
+    collection_frequency: weekly
+    primary_collection_method: podcast_rss
+    notes_for_hermes: RSS feed URL may need verification. Browse manually if feed fails.
     extractor_strategy:
       transcript_source: official_or_page
       diff_mode: episode_list
@@ -120,6 +138,9 @@ podcasts:
     risk_focus: [cyber, agent_security, mlsec, vulnerability_discovery]
     transcript_strategy: website_if_available
     notable_entities: []
+    access_status: degraded
+    collection_frequency: weekly
+    notes_for_hermes: No known RSS feed. Browse manually to discover episodes.
     extractor_strategy:
       transcript_source: website_or_none
       diff_mode: episode_list

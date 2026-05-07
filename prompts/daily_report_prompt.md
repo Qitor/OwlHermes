@@ -101,6 +101,33 @@
 - **避免 AGI 末日论** — 不要放大 AGI 时间线推测，除非有可信证据
 - **普通产品发布不应自动成为信号** — 除非有明确的风险维度论证
 
+## 来源可靠性（R1-14）
+
+来源注册表现在包含 `access_status`、`collection_frequency`、`notes_for_hermes` 等字段。使用这些字段避免在已知故障路径上浪费时间。
+
+**access_status 含义：**
+- `ok` — 可靠，helper 可用，正常浏览
+- `degraded` — helper 可能失败，有回退方案；失败后尝试回退
+- `blocked` — 自动化访问完全不可能；只能用搜索引擎或人工审查
+- `timeout_prone` — 页面经常超时；试一次，失败就跳过
+- `manual_only` — 无自动化采集方式；仅人工审查
+- `disabled` — 来源已关闭；跳过
+
+**使用方式：**
+1. 先调用 `risk_source_health_summary` 查看 `access_status_counts` 和 `degraded_or_blocked` 列表
+2. 优先检查 `access_status=ok` 的来源
+3. 对 `blocked` 来源：查看 `notes_for_hermes` 了解搜索引擎替代方案
+4. 对 `degraded` 来源：先尝试 helper，如果响应中 `search_fallback_recommended=true`，改用搜索引擎
+5. 对 `timeout_prone` 来源：尝试一次，短超时，失败则跳过
+6. `collection_frequency: weekly` 或 `biweekly` 的来源不需要每天检查
+
+**helper_preview 响应新增字段：**
+- `access_status` — 来源当前访问状态
+- `notes_for_hermes` — 来源特定操作指引
+- `search_fallback_recommended` — 建议使用搜索引擎替代
+- `manual_review_required` — 需要人工审查
+- `skipped_reason` — 跳过原因（如 `access_status=blocked`）
+
 ## 工作方式
 
 你有两类工具可用：

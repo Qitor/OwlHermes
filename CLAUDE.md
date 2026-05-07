@@ -54,6 +54,13 @@ make daily-report-live-vault   # Run daily report with live Obsidian vault loggi
 make live-vault-inspect        # Inspect live vault runs
 make obsidian-open-live-run    # Open latest live run in Obsidian/Finder
 make daily-report-live-vault-e2e  # Full E2E: daily-report + live vault + quality + export + inspect with requirements
+make plugin-install-local       # Symlink OwlHermes plugin into ~/.hermes/plugins/owlhermes
+make plugin-smoke               # Validate plugin package without Hermes runtime
+make hermes-plugin-smoke        # Check Hermes plugin discovery/enabled status
+make skill-smoke                # Validate bundled skills and references
+make daily-report-plugin        # Run daily report with plugin-first prompt/config
+make daily-report-live-vault-plugin  # Run live-vault daily report with plugin-first config
+make plugin-e2e                 # Full plugin E2E: smoke + skill + hermes-plugin + mcp
 ```
 
 Run a single test: `.venv/bin/python -m pytest tests/test_dedup_service.py`
@@ -63,7 +70,7 @@ Run a specific test: `.venv/bin/python -m pytest tests/test_api.py::test_health`
 
 **Hermes owns judgment/orchestration; the backend owns deterministic state and tools.**
 
-Data flow: Source Registry (YAML) → Hermes-Agent (external, daily workflow) → Backend API (store/retrieve/dedup) → MCP Server (23 tool functions for Hermes)
+Data flow: Source Registry (YAML) → Hermes-Agent (external, daily workflow) → Backend API (store/retrieve/dedup) → Plugin Tools (5 facade tools, preferred) or MCP Server (23 tool functions, legacy)
 
 ### Key layers
 
@@ -80,6 +87,7 @@ Data flow: Source Registry (YAML) → Hermes-Agent (external, daily workflow) �
 - **`services/evidence.py`** — R1-12 evidence/claim persistence: store, search, list, serialize
 - **`services/live_research.py`** — R1-13 live research event persistence: store, search, serialize
 - **`workers/`** — Placeholder daily_run returning not_implemented
+- **`hermes_plugin/`** — R1-15 Hermes-native plugin: 5 facade tools (owl_risk_state, owl_risk_discovery, owl_live_vault, owl_report_quality, owl_obsidian_export) with action dispatch, schemas, `/owl` slash command, interface mode selector
 
 ### Database
 
@@ -91,14 +99,16 @@ Tests use in-memory SQLite (`StaticPool`) as PostgreSQL stand-in. FastAPI `TestC
 
 ## Implementation Status
 
-R1-01 through R1-09B are done. R1-10 (stable daily report run modes) is done. R1-11 (daily report quality loop) is done. R1-11B (model-tiered daily report pipeline) is done. R1-11C (two-phase daily report finalization) is done. R1-12 (signal evidence persistence + Obsidian Intelligence Vault) is done — evidence store/search MCP tools, Obsidian vault export with generated-block safety. R1-12B (real E2E vault population validation) is done — evidence placeholders, candidate/run notes, daily linking, inspect script, E2E target. R1-13 (live Obsidian research logging) is done — live vault writer, research event persistence, 4 live MCP tools, live run scripts and inspection. R1-13B (live vault E2E validation & UX hardening) is done — stateless writer fix, COT violation detection, schema hardening (Literal types, descriptions), export linking to live runs, Live Run Index, E2E target with requirements, prompt hardening with run_id guidance. R1-13C (live vault UX contract — immediate daily report notes, bidirectional links, review queue live integration, `risk_live_daily_report_upsert`, extended `risk_live_run_finalize`, digest mirror, runner safety net) is done. R1-13+ (website, production delivery) are TODO.
+R1-01 through R1-09B are done. R1-10 (stable daily report run modes) is done. R1-11 (daily report quality loop) is done. R1-11B (model-tiered daily report pipeline) is done. R1-11C (two-phase daily report finalization) is done. R1-12 (signal evidence persistence + Obsidian Intelligence Vault) is done — evidence store/search MCP tools, Obsidian vault export with generated-block safety. R1-12B (real E2E vault population validation) is done — evidence placeholders, candidate/run notes, daily linking, inspect script, E2E target. R1-13 (live Obsidian research logging) is done — live vault writer, research event persistence, 4 live MCP tools, live run scripts and inspection. R1-13B (live vault E2E validation & UX hardening) is done — stateless writer fix, COT violation detection, schema hardening (Literal types, descriptions), export linking to live runs, Live Run Index, E2E target with requirements, prompt hardening with run_id guidance. R1-13C (live vault UX contract — immediate daily report notes, bidirectional links, review queue live integration, `risk_live_daily_report_upsert`, extended `risk_live_run_finalize`, digest mirror, runner safety net) is done. R1-14 (source reliability patch & registry collection policy) is done — `access_status`/`collection_frequency`/`failure_policy` fields in YAML registries, helper access gate, fallback method chain, health reliability reporting, `access_status` filter on list_due_sources, prompt/SKILL reliability guidance. R1-15 (full Hermes plugin + bundled skills migration) is done — 5 facade plugin tools, plugin distribution, skill refactoring, plugin-first prompts, install/smoke scripts, MCP as legacy. R1-15+ (plugin runtime E2E, website, production delivery) are TODO.
 
 ### Hermes Integration
 
 Hermes-Agent is external (not vendored). Integration via `~/.hermes/config.yaml`:
-- MCP server `ai_risk_observer`: stdio command launching `.venv/bin/python -m frontier_ai_risk_observer.mcp.server`
+- **Plugin (preferred)**: OwlHermes plugin with 5 `owl_*` facade tools + `/owl` slash command. Enable via `hermes plugins enable owlhermes` or `plugins.enabled: [owlhermes]` in config.yaml
+- **MCP (legacy fallback)**: MCP server `ai_risk_observer`: stdio command launching `.venv/bin/python -m frontier_ai_risk_observer.mcp.server`
 - Skills external dir: `skills/` directory
-- 23 `risk_*` tools allowlisted, prompts/resources disabled
+- `OWL_HERMES_INTERFACE_MODE` env var: `plugin` | `mcp` | `both` (default)
+- 23 `risk_*` tools allowlisted in MCP config, prompts/resources disabled
 - `hermes mcp add` CLI has `-m` flag parsing issues; use YAML editing instead (`make hermes-smoke-apply`)
 - MCP SDK is an optional dependency: `pip install -e ".[mcp]"`
 

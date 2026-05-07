@@ -12,6 +12,13 @@ sources:
     refresh_interval: daily
     enabled: true
     risk_focus: [autonomy, ai_rnd, eval_integrity, catastrophic_risk]
+    access_status: ok
+    collection_frequency: biweekly
+    primary_collection_method: browser_list_page
+    known_failures:
+      - type: stale_content
+        message: Last update Nov 2025
+        recommended_action: Check biweekly instead of daily
     extractor_strategy:
       diff_mode: list_items
       requires_js: false
@@ -51,6 +58,23 @@ sources:
     max_items: 10
     lookback_days: 30
     known_issues: R1-08 found no recent items in the last 7 days; blog may update infrequently.
+    access_status: degraded
+    collection_frequency: weekly
+    primary_collection_method: browser_list_page
+    fallback_methods: [search_fallback]
+    failure_policy:
+      max_attempts: 1
+      timeout_seconds: 15
+      on_failure: skip
+    known_failures:
+      - type: http_403
+        message: 403 Forbidden on scrapling helper
+        observed_in_round: R1-09
+        recommended_action: Browse manually or use search fallback
+      - type: stale_content
+        message: Last post 2026-01-20, very low update frequency
+        recommended_action: Check weekly instead of daily
+    notes_for_hermes: Scrapling helper returns 403. Browse manually or search. Updates very infrequently.
     extractor_strategy:
       diff_mode: list_items
       requires_js: false
@@ -74,6 +98,20 @@ sources:
     max_items: 10
     lookback_days: 14
     known_issues: Direct article URL construction may return 404; prefer extracting links from official news page listing.
+    access_status: degraded
+    collection_frequency: daily
+    primary_collection_method: browser_list_page
+    fallback_methods: [search_fallback]
+    failure_policy:
+      max_attempts: 1
+      timeout_seconds: 15
+      on_failure: fallback
+    known_failures:
+      - type: ssl_error
+        message: SSL EOF error on scrapling helper
+        observed_in_round: R1-09
+        recommended_action: Browse manually to list page, extract links from there
+    notes_for_hermes: Scrapling helper fails with SSL EOF. Must browse list page manually to extract article links.
     extractor_strategy:
       diff_mode: list_items
       requires_js: false
@@ -91,6 +129,19 @@ sources:
     refresh_interval: daily
     enabled: true
     risk_focus: [preparedness, model_release, system_card, safety_governance, policy]
+    access_status: blocked
+    collection_frequency: daily
+    primary_collection_method: search_fallback
+    fallback_methods: [manual]
+    failure_policy:
+      max_attempts: 1
+      on_failure: manual_review
+    known_failures:
+      - type: cloudflare_block
+        message: Cloudflare browser verification blocks all automated access
+        observed_in_round: R1-05
+        recommended_action: Use search engine to find third-party reports
+    notes_for_hermes: Completely blocked by Cloudflare. Use Yahoo Search for third-party coverage. Do not attempt direct browsing.
     extractor_strategy:
       diff_mode: list_items
       requires_js: false
@@ -108,6 +159,9 @@ sources:
     refresh_interval: daily
     enabled: true
     risk_focus: [frontier_safety_framework, cyber, bio, autonomy, responsibility]
+    access_status: ok
+    collection_frequency: daily
+    primary_collection_method: browser_list_page
     extractor_strategy:
       diff_mode: list_items
       requires_js: false
@@ -142,6 +196,9 @@ sources:
     refresh_interval: daily
     enabled: true
     risk_focus: [cyber, autonomous_systems, chem_bio, control, safety_cases, science_of_evals]
+    access_status: ok
+    collection_frequency: daily
+    primary_collection_method: browser_list_page
     extractor_strategy:
       diff_mode: list_items
       requires_js: false
@@ -159,6 +216,10 @@ sources:
     refresh_interval: daily
     enabled: true
     risk_focus: [evals, sabotage, cyber, autonomy, model_control]
+    access_status: ok
+    collection_frequency: daily
+    primary_collection_method: browser_list_page
+    notes_for_hermes: Single article URLs may 404. Always extract links from the list page; do not construct URLs.
     extractor_strategy:
       diff_mode: list_items
       requires_js: false
@@ -176,6 +237,9 @@ sources:
     refresh_interval: daily
     enabled: true
     risk_focus: [agent_security, standards, red_teaming, cyber, national_security]
+    access_status: ok
+    collection_frequency: daily
+    primary_collection_method: browser_list_page
     extractor_strategy:
       diff_mode: list_items
       requires_js: false
@@ -193,6 +257,10 @@ sources:
     refresh_interval: daily
     enabled: true
     risk_focus: [ai_governance, policy, threat_modeling, geopolitics, compute_governance]
+    access_status: ok
+    collection_frequency: weekly
+    primary_collection_method: browser_list_page
+    notes_for_hermes: Year filter requires JavaScript interaction. Last article 2026-04-20.
     extractor_strategy:
       diff_mode: list_items
       requires_js: false
@@ -244,6 +312,19 @@ sources:
     refresh_interval: daily
     enabled: true
     risk_focus: [idais, international_coordination, red_lines, consensus_signal]
+    access_status: timeout_prone
+    collection_frequency: weekly
+    primary_collection_method: browser_list_page
+    failure_policy:
+      max_attempts: 1
+      timeout_seconds: 15
+      on_failure: skip
+    known_failures:
+      - type: timeout
+        message: Page timeout, cannot load
+        observed_in_round: R1-09
+        recommended_action: Retry once, skip on failure
+    notes_for_hermes: Page frequently times out. Try once and skip if it fails.
     extractor_strategy:
       diff_mode: list_items
       requires_js: false
@@ -261,6 +342,19 @@ sources:
     refresh_interval: daily
     enabled: true
     risk_focus: [extreme_risk, international_coordination, red_lines, consensus_signal]
+    access_status: timeout_prone
+    collection_frequency: weekly
+    primary_collection_method: browser_list_page
+    failure_policy:
+      max_attempts: 1
+      timeout_seconds: 15
+      on_failure: skip
+    known_failures:
+      - type: timeout
+        message: Page timeout, cannot load
+        observed_in_round: R1-09
+        recommended_action: Retry once, skip on failure
+    notes_for_hermes: Page frequently times out. Try once and skip if it fails.
     extractor_strategy:
       diff_mode: agenda_items
       requires_js: false
@@ -295,6 +389,10 @@ sources:
     refresh_interval: weekly
     enabled: true
     risk_focus: [ai_act, gpaim, policy, international_cooperation]
+    access_status: ok
+    collection_frequency: weekly
+    primary_collection_method: browser_list_page
+    notes_for_hermes: Topic filter (topics=1666) may not work reliably. Use Latest News section instead.
     extractor_strategy:
       diff_mode: section_hash
       requires_js: false
@@ -350,6 +448,20 @@ sources:
     helper_type: arxiv_query
     max_items: 20
     lookback_days: 7
+    access_status: degraded
+    collection_frequency: daily
+    primary_collection_method: arxiv_api
+    fallback_methods: [search_fallback, manual]
+    failure_policy:
+      max_attempts: 2
+      timeout_seconds: 45
+      on_failure: fallback
+    known_failures:
+      - type: rate_limit
+        message: API frequently rate-limited or user-policy blocked
+        observed_in_round: R1-05
+        recommended_action: Fall back to browser search or OAI-PMH endpoint
+    notes_for_hermes: arXiv API is rate-limited. If helper fails, use browser to search arXiv directly.
     extractor_strategy:
       diff_mode: api_items
       requires_js: false
@@ -370,6 +482,9 @@ sources:
     helper_type: rss
     max_items: 15
     lookback_days: 7
+    access_status: ok
+    collection_frequency: daily
+    primary_collection_method: rss
     extractor_strategy:
       diff_mode: feed_items
       requires_js: false

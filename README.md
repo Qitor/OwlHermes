@@ -474,6 +474,8 @@ R1-13 adds live Obsidian vault writing during Hermes research runs, making the v
 
 **R1-13C live vault UX repair:** daily report notes written to `00_Daily/` immediately during live runs; bidirectional links between all note types (daily, signals, evidence, candidates, sources); review queue (`90_Review_Queue/`) updated live; new `risk_live_daily_report_upsert` MCP tool (23 total); `risk_live_run_finalize` extended with `final_report_markdown` for immediate daily note write; `risk_digest_store` mirrors to Obsidian when live vault enabled; runner safety net preserves partial state on interruption. `make obsidian-export` is no longer needed for normal live UX — reserved for backfill, repair, and full consolidation only.
 
+**R1-14 source reliability patch:** `access_status`/`collection_frequency`/`failure_policy`/`known_failures`/`notes_for_hermes` fields embedded in YAML registries; `_run_helper_for_entry` returns `(candidates, metadata)` with access gate for blocked/disabled/manual_only sources; fallback method chain (search_fallback, manual); `risk_registry_list_due_sources` accepts `access_status` filter; `source_health_summary` reports access_status_counts, degraded_or_blocked, timeout_prone, collection_method_counts, recent_known_failures; prompts and SKILL.md include structured reliability guidance; 3 podcasts now have RSS feed URLs configured (axrp, 80k, latent_space).
+
 ```bash
 make daily-report-live-vault       # Run daily report with live vault logging
 make daily-report-live-vault-e2e   # Full E2E with requirements validation
