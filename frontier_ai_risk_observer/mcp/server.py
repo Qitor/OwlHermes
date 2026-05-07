@@ -357,41 +357,29 @@ def risk_digest_store(digest: dict[str, Any]) -> dict[str, Any]:
                 upsert_daily_report_note,
             )
 
-            # Discover signal/evidence note paths from auto-mirror
+            # Discover signal/evidence/candidate/source note paths from auto-mirror
             signal_note_paths: list[str] = []
             evidence_note_paths: list[str] = []
             candidate_note_paths: list[str] = []
+            source_note_paths: list[str] = []
             run_id = _find_active_live_run(config)
             if run_id:
-                signals_dir = (
+                base_dir = (
                     config.vault_path / "AI-Risk-Intelligence"
-                    / config.runs_dir_name / run_id / "Signals"
+                    / config.runs_dir_name / run_id
                 )
-                if signals_dir.exists():
-                    for f in signals_dir.iterdir():
-                        if f.suffix == ".md":
-                            rel = f"08_Live_Runs/{run_id}/Signals/{f.stem}"
-                            signal_note_paths.append(rel)
-
-                evidence_dir = (
-                    config.vault_path / "AI-Risk-Intelligence"
-                    / config.runs_dir_name / run_id / "Evidence"
-                )
-                if evidence_dir.exists():
-                    for f in evidence_dir.iterdir():
-                        if f.suffix == ".md":
-                            rel = f"08_Live_Runs/{run_id}/Evidence/{f.stem}"
-                            evidence_note_paths.append(rel)
-
-                candidates_dir = (
-                    config.vault_path / "AI-Risk-Intelligence"
-                    / config.runs_dir_name / run_id / "Candidates"
-                )
-                if candidates_dir.exists():
-                    for f in candidates_dir.iterdir():
-                        if f.suffix == ".md":
-                            rel = f"08_Live_Runs/{run_id}/Candidates/{f.stem}"
-                            candidate_note_paths.append(rel)
+                for subdir_name, paths_list in [
+                    ("Signals", signal_note_paths),
+                    ("Evidence", evidence_note_paths),
+                    ("Candidates", candidate_note_paths),
+                    ("Sources", source_note_paths),
+                ]:
+                    subdir = base_dir / subdir_name
+                    if subdir.exists():
+                        for f in subdir.iterdir():
+                            if f.suffix == ".md":
+                                rel = f"08_Live_Runs/{run_id}/{subdir_name}/{f.stem}"
+                                paths_list.append(rel)
 
             upsert_daily_report_note(
                 config.vault_path,
@@ -403,7 +391,25 @@ def risk_digest_store(digest: dict[str, Any]) -> dict[str, Any]:
                 signal_note_paths=signal_note_paths,
                 evidence_note_paths=evidence_note_paths,
                 candidate_note_paths=candidate_note_paths,
+                source_note_paths=source_note_paths,
             )
+
+            # Append timeline event to Live Research Log
+            if run_id:
+                try:
+                    from frontier_ai_risk_observer.obsidian.live_writer import (
+                        LiveEvent,
+                        LiveVaultWriter,
+                    )
+
+                    writer = LiveVaultWriter(config)
+                    event = LiveEvent(
+                        event_type="digest_stored",
+                        title=f"日报已存储: {payload.digest_date.isoformat()}",
+                    )
+                    writer.append_event(run_id=run_id, event=event)
+                except Exception:  # noqa: BLE001
+                    pass  # Best-effort, don't fail on timeline error
     except Exception as exc:  # noqa: BLE001
         vault_warnings.append(f"Obsidian mirror failed: {exc}")
 

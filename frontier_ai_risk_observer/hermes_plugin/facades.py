@@ -117,6 +117,94 @@ def _risk_state_seen_check(payload: dict) -> dict[str, Any]:
         session.close()
 
 
+def _auto_mirror_to_vault(
+    note_type: str,
+    slug: str,
+    title: str,
+    body: str,
+    source_id: str | None = None,
+) -> dict[str, Any]:
+    """Best-effort auto-mirror a note to the live Obsidian vault.
+
+    Mirrors the same logic as _auto_mirror_to_live_vault in server.py.
+    Returns mirror info dict (mirrored, run_id, note_path, error).
+    """
+    result: dict[str, Any] = {
+        "mirrored": False,
+        "run_id": None,
+        "note_path": None,
+        "error": None,
+    }
+    try:
+        config = _get_live_vault_config()
+        if not config.live_logging_enabled:
+            return result
+
+        # Find active run
+        from frontier_ai_risk_observer.obsidian.live_writer import LiveVaultWriter
+        vault_base = config.vault_path / "AI-Risk-Intelligence"
+        live_dir = vault_base / config.runs_dir_name
+        if not live_dir.exists():
+            return result
+
+        run_id = None
+        for d in sorted(live_dir.iterdir(), reverse=True):
+            if not d.is_dir():
+                continue
+            log_path = d / "Live Research Log.md"
+            if log_path.exists() and "status: in_progress" in log_path.read_text(
+                encoding="utf-8", errors="replace",
+            ):
+                run_id = d.name
+                break
+        if not run_id:
+            # Fallback: today's completed run
+            from datetime import date
+            today_prefix = date.today().isoformat()
+            for d in sorted(live_dir.iterdir(), reverse=True):
+                if d.is_dir() and d.name.startswith(today_prefix):
+                    run_id = d.name
+                    break
+        if not run_id:
+            return result
+
+        writer = LiveVaultWriter(config)
+        dispatch = {
+            "signal": writer.upsert_signal_note,
+            "evidence": writer.upsert_evidence_note,
+            "candidate": writer.upsert_candidate_note,
+        }
+        handler = dispatch.get(note_type)
+        if handler is None:
+            return result
+
+        write_result = handler(run_id=run_id, slug=slug, title=title, body=body)
+
+        # Append timeline event
+        from frontier_ai_risk_observer.obsidian.live_writer import LiveEvent
+        event_type_map = {
+            "signal": "signal_stored",
+            "evidence": "evidence_stored",
+            "candidate": "candidate_stored",
+        }
+        event = LiveEvent(
+            event_type=event_type_map.get(note_type, "note"),
+            title=title,
+            source_id=source_id,
+        )
+        writer.append_event(run_id=run_id, event=event)
+
+        result["mirrored"] = write_result.success
+        result["run_id"] = run_id
+        result["note_path"] = f"08_Live_Runs/{run_id}/{note_type.capitalize()}s/{slug}"
+        if write_result.errors:
+            result["error"] = "; ".join(write_result.errors)
+    except Exception as exc:
+        result["error"] = str(exc)
+
+    return result
+
+
 def _risk_state_store_raw_item(payload: dict) -> dict[str, Any]:
     from frontier_ai_risk_observer.api.schemas import RawItemCreate
     from frontier_ai_risk_observer.services.ingestion import create_raw_item
@@ -124,11 +212,24 @@ def _risk_state_store_raw_item(payload: dict) -> dict[str, Any]:
     try:
         raw_create = RawItemCreate.model_validate(payload)
         result = create_raw_item(session, raw_create)
-        return _ok(
+        response = _ok(
             item=_raw_item_to_dict(result.item),
             is_duplicate=result.is_duplicate,
             match_type=result.match_type,
         )
+        # Auto-mirror to vault
+        if not result.is_duplicate:
+            slug = _slugify(result.item.title or "untitled")
+            mirror = _auto_mirror_to_vault(
+                note_type="candidate",
+                slug=slug,
+                title=result.item.title or "Untitled",
+                body=_truncate(result.item.content_text, 2000),
+                source_id=result.item.source_id,
+            )
+            if mirror["mirrored"]:
+                response["vault_mirror"] = mirror
+        return response
     except Exception as exc:
         return _error("validation_error", str(exc))
     finally:
@@ -195,7 +296,27 @@ def _risk_state_store_evidence(payload: dict) -> dict[str, Any]:
     session = _get_session()
     try:
         claim = store_evidence_item(session, **payload)
-        return _ok(evidence=evidence_to_dict(claim))
+        claim_dict = evidence_to_dict(claim)
+        response = _ok(evidence=claim_dict)
+        # Auto-mirror to vault
+        body_parts = []
+        if claim_dict.get("claim_text"):
+            body_parts.append(f"**主张**: {claim_dict['claim_text']}")
+        if claim_dict.get("evidence_url"):
+            body_parts.append(f"**证据URL**: {claim_dict['evidence_url']}")
+        if claim_dict.get("evidence_excerpt"):
+            body_parts.append(f"**摘录**: {_truncate(claim_dict['evidence_excerpt'], 1000)}")
+        slug = _slugify(claim_dict.get("claim_text", "untitled"))
+        mirror = _auto_mirror_to_vault(
+            note_type="evidence",
+            slug=slug,
+            title=claim_dict.get("claim_text", "Untitled")[:100],
+            body="\n".join(body_parts),
+            source_id=claim_dict.get("source_id"),
+        )
+        if mirror["mirrored"]:
+            response["vault_mirror"] = mirror
+        return response
     except Exception as exc:
         return _error("validation_error", str(exc))
     finally:
@@ -226,7 +347,27 @@ def _risk_state_store_signal(payload: dict) -> dict[str, Any]:
     try:
         signal_input = SignalStoreInput.model_validate(payload)
         signal = store_signal(session, signal_input)
-        return _ok(signal=signal_to_dict(signal))
+        signal_dict = signal_to_dict(signal)
+        response = _ok(signal=signal_dict)
+        # Auto-mirror to vault
+        body_parts = []
+        if signal_dict.get("what_changed"):
+            body_parts.append(f"**变化**: {signal_dict['what_changed']}")
+        if signal_dict.get("why_it_matters"):
+            body_parts.append(f"**重要性**: {signal_dict['why_it_matters']}")
+        if signal_dict.get("what_to_watch_next"):
+            body_parts.append(f"**观察**: {signal_dict['what_to_watch_next']}")
+        slug = _slugify(signal_dict.get("title", "untitled"))
+        mirror = _auto_mirror_to_vault(
+            note_type="signal",
+            slug=slug,
+            title=signal_dict.get("title", "Untitled"),
+            body="\n".join(body_parts),
+            source_id=signal_dict.get("source_id"),
+        )
+        if mirror["mirrored"]:
+            response["vault_mirror"] = mirror
+        return response
     except Exception as exc:
         return _error("validation_error", str(exc))
     finally:
@@ -829,3 +970,22 @@ def _source_run_to_dict(run) -> dict[str, Any]:
         "duplicate_count": run.duplicate_count,
         "error_message": run.error_message,
     }
+
+
+def _slugify(text: str) -> str:
+    """Slugify text for filenames."""
+    import re
+    text = text.lower().strip()
+    text = re.sub(r"[^\w\s-]", "", text)
+    text = re.sub(r"[\s_]+", "-", text)
+    text = text[:80]
+    return text or "untitled"
+
+
+def _truncate(text: str | None, max_len: int) -> str:
+    """Truncate text with ellipsis."""
+    if not text:
+        return ""
+    if len(text) <= max_len:
+        return text
+    return text[:max_len] + "..."
