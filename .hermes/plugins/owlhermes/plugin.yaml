@@ -1,0 +1,23 @@
+name: owlhermes
+version: "0.1.0"
+description: "Hermes-native Frontier AI Risk Intelligence Observer — 5 facade tools for deterministic state, source discovery, live Obsidian vault, report quality, and vault export."
+author: OwlHermes Team
+kind: standalone
+requires_env:
+  - name: DATABASE_URL
+    description: "SQLite or PostgreSQL connection URL. Default: sqlite:///./.local/risk_observer_dryrun.db"
+  - name: SOURCE_REGISTRY_DIR
+    description: "Path to source_registry/ directory. Default: <repo>/source_registry/"
+  - name: OBSIDIAN_VAULT_PATH
+    description: "Obsidian vault root path. Required for vault export and live logging."
+  - name: OBSIDIAN_LIVE_LOGGING_ENABLED
+    description: "Set to 'true' to enable live Obsidian research logging. Default: false"
+  - name: OBSIDIAN_LIVE_APPEND_TO_DAILY
+    description: "Append live events to daily report note. Default: true"
+provides_tools:
+  - owl_risk_state
+  - owl_risk_discovery
+  - owl_live_vault
+  - owl_report_quality
+  - owl_obsidian_export
+provides_hooks: []

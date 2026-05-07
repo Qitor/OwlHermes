@@ -1,4 +1,4 @@
-.PHONY: install test lint typecheck run-api db-init db-init-dryrun db-check db-reset-dryrun validate-registries mcp-smoke hermes-smoke hermes-smoke-apply r108-dry-run-preflight r108-run-hermes r108-inspect-state source-health preview-helpers r109-helper-preflight r109b-dry-run-preflight r109b-run-hermes r109b-inspect-state daily-report-preflight daily-report daily-report-inspect hermes-interactive-preflight hermes-interactive-daily hermes-interactive-copy-prompt report-quality-check report-quality-review daily-report-with-quality model-tier-smoke model-tier-smoke-live daily-report-finalize daily-report-debug obsidian-export obsidian-export-dry-run obsidian-open-latest daily-report-and-obsidian obsidian-inspect daily-report-and-obsidian-e2e daily-report-live-vault daily-report-live-vault-e2e live-vault-inspect obsidian-open-live-run
+.PHONY: install test lint typecheck run-api db-init db-init-dryrun db-check db-reset-dryrun validate-registries mcp-smoke hermes-smoke hermes-smoke-apply r108-dry-run-preflight r108-run-hermes r108-inspect-state source-health preview-helpers r109-helper-preflight r109b-dry-run-preflight r109b-run-hermes r109b-inspect-state daily-report-preflight daily-report daily-report-inspect hermes-interactive-preflight hermes-interactive-daily hermes-interactive-copy-prompt report-quality-check report-quality-review daily-report-with-quality model-tier-smoke model-tier-smoke-live daily-report-finalize daily-report-debug obsidian-export obsidian-export-dry-run obsidian-open-latest daily-report-and-obsidian obsidian-inspect daily-report-and-obsidian-e2e daily-report-live-vault daily-report-live-vault-e2e live-vault-inspect obsidian-open-live-run plugin-install-local plugin-install-local-copy plugin-smoke hermes-plugin-smoke skill-smoke daily-report-plugin daily-report-live-vault-plugin plugin-e2e
 
 PYTHON := .venv/bin/python
 RUFF := .venv/bin/ruff
@@ -247,3 +247,47 @@ daily-report-live-vault-e2e:
 	@echo "=== Inspecting Obsidian vault ==="
 	$(MAKE) obsidian-inspect
 	@echo "=== R1-13C: E2E Validation Complete ==="
+
+# R1-15: Plugin + Bundled Skills Migration
+
+plugin-install-local:
+	$(PYTHON) scripts/install_hermes_plugin.py --mode symlink
+
+plugin-install-local-copy:
+	$(PYTHON) scripts/install_hermes_plugin.py --mode copy
+
+plugin-smoke:
+	$(PYTHON) scripts/plugin_smoke.py
+
+hermes-plugin-smoke:
+	$(PYTHON) scripts/hermes_plugin_smoke.py
+
+skill-smoke:
+	$(PYTHON) scripts/skill_smoke.py
+
+daily-report-plugin:
+	DATABASE_URL="$(DRYRUN_DB_URL)" $(PYTHON) scripts/daily_report.py --run --interface plugin
+
+daily-report-live-vault-plugin:
+	@if [ -z "$$OBSIDIAN_VAULT_PATH" ]; then \
+		echo "ERROR: OBSIDIAN_VAULT_PATH is not set."; \
+		echo "Set it before running, e.g.:"; \
+		echo "  OBSIDIAN_VAULT_PATH=~/Documents/airo make daily-report-live-vault-plugin"; \
+		exit 1; \
+	fi
+	OBSIDIAN_LIVE_LOGGING_ENABLED=true DATABASE_URL="$(DRYRUN_DB_URL)" $(PYTHON) scripts/daily_report.py --run --live-vault --interface plugin
+
+plugin-e2e:
+	@echo "=== R1-15: Plugin E2E Validation ==="
+	$(MAKE) plugin-smoke
+	$(MAKE) skill-smoke
+	$(MAKE) hermes-plugin-smoke
+	$(MAKE) mcp-smoke
+	@echo "=== Plugin E2E smoke passed ==="
+	@if [ -n "$$OBSIDIAN_VAULT_PATH" ]; then \
+		echo "OBSIDIAN_VAULT_PATH set — running daily-report-plugin..."; \
+		$(MAKE) daily-report-plugin; \
+	else \
+		echo "OBSIDIAN_VAULT_PATH not set — skipping live daily report."; \
+	fi
+	@echo "=== R1-15: Plugin E2E Complete ==="

@@ -1,8 +1,28 @@
 # Example Hermes config fragment for AI Risk Signal Observatory.
 # Merge into ~/.hermes/config.yaml.
 #
-# NOTE: `hermes mcp add` CLI cannot pass `-m` as an arg because Hermes'
-# argparse intercepts it. Use `make hermes-smoke-apply` or edit YAML directly.
+# R1-15: Plugin-first architecture is now preferred.
+# Use the Hermes plugin below as the primary integration surface.
+# MCP remains available as legacy fallback.
+
+# ── Plugin Configuration (Preferred) ──────────────────────────────────
+#
+# Install the plugin first:
+#   make plugin-install-local
+#
+# Then enable it:
+#   hermes plugins enable owlhermes
+#
+# Or add to this config file:
+
+plugins:
+  enabled:
+    - owlhermes
+
+# ── Legacy MCP Fallback ───────────────────────────────────────────────
+#
+# MCP tools are available as fallback when plugin tools are unavailable.
+# To use MCP-only mode, remove owlhermes from plugins.enabled above.
 
 mcp_servers:
   ai_risk_observer:

@@ -34,6 +34,8 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PROMPT_FILE = REPO_ROOT / "prompts" / "daily_report_prompt.md"
 FINALIZE_PROMPT_FILE = REPO_ROOT / "prompts" / "daily_report_finalize_prompt.md"
+PLUGIN_PROMPT_FILE = REPO_ROOT / "prompts" / "daily_report_plugin_prompt.md"
+PLUGIN_FINALIZE_PROMPT_FILE = REPO_ROOT / "prompts" / "daily_report_plugin_finalize_prompt.md"
 RUNS_DIR = REPO_ROOT / "runs" / "daily"
 DRYRUN_DB_PATH = REPO_ROOT / ".local" / "risk_observer_dryrun.db"
 DRYRUN_DB_URL = f"sqlite:///{DRYRUN_DB_PATH}"
@@ -856,6 +858,16 @@ def main() -> None:
         "--live-vault", action="store_true",
         help="Enable live Obsidian vault logging (requires OBSIDIAN_VAULT_PATH)",
     )
+    parser.add_argument(
+        "--interface", type=str, default="auto",
+        choices=["plugin", "mcp", "auto"],
+        help=(
+            "Tool interface mode: "
+            "plugin (plugin-first prompts), "
+            "mcp (legacy prompts), "
+            "auto (plugin preferred, mcp fallback). Default: auto"
+        ),
+    )
     args = parser.parse_args()
 
     if not any([args.preflight, args.run, args.inspect]):
@@ -883,6 +895,39 @@ def main() -> None:
 
         prompt_file = Path(args.prompt_file) if args.prompt_file else None
         finalize_file = Path(args.finalize_prompt_file) if args.finalize_prompt_file else None
+
+        # Select prompts based on interface mode
+        interface_mode = args.interface
+        if prompt_file is None:
+            if interface_mode == "plugin":
+                prompt_file = PLUGIN_PROMPT_FILE
+            elif interface_mode == "auto":
+                # Prefer plugin prompts if plugin is installed
+                plugin_yaml = (
+                    REPO_ROOT / ".hermes" / "plugins"
+                    / "owlhermes" / "plugin.yaml"
+                )
+                plugin_installed = plugin_yaml.exists()
+                prompt_file = (
+                    PLUGIN_PROMPT_FILE if plugin_installed
+                    else PROMPT_FILE
+                )
+            # else mcp: use default PROMPT_FILE
+
+        if finalize_file is None:
+            if interface_mode == "plugin":
+                finalize_file = PLUGIN_FINALIZE_PROMPT_FILE
+            elif interface_mode == "auto":
+                plugin_yaml = (
+                    REPO_ROOT / ".hermes" / "plugins"
+                    / "owlhermes" / "plugin.yaml"
+                )
+                plugin_installed = plugin_yaml.exists()
+                finalize_file = (
+                    PLUGIN_FINALIZE_PROMPT_FILE if plugin_installed
+                    else FINALIZE_PROMPT_FILE
+                )
+            # else mcp: use default FINALIZE_PROMPT_FILE
 
         print(f"\n  Run directory: {run_dir}")
         summary = run_two_phase(
